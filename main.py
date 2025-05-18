@@ -1,8 +1,6 @@
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
-from flask import Flask
-from threading import Thread
 import os
 import asyncio
 import aiohttp
@@ -13,20 +11,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+RELAY_CHANNEL_ID = int(os.environ.get("RELAY_CHANNEL_ID", "0"))
 if not DISCORD_BOT_TOKEN:
     raise ValueError("DISCORD_BOT_TOKEN is not set in environment variables")
-
-# Flask setup for uptime monitoring
-app = Flask('')
-@app.route('/')
-def home():
-    return "Bot is alive!"
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))  # Use Render-assigned port
-    app.run(host='0.0.0.0', port=port, threaded=True, debug=False)
-def keep_alive():
-    t = Thread(target=run_flask, daemon=True)
-    t.start()
+if not RELAY_CHANNEL_ID:
+    raise ValueError("RELAY_CHANNEL_ID is not set in environment variables")
 
 # Bot setup
 intents = discord.Intents.default()
@@ -96,12 +85,35 @@ async def on_ready():
     print(f"🛰️ {bot.user.name} online at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     for name in SOURCE_CHANNELS:
         last_posts[name] = {"time": None, "content": None, "image": None, "message_id": None}
-    keep_alive()
     check_announcements.start()
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
+        return
+
+    # Handle relayed messages from self-bot
+    if message.channel.id == RELAY_CHANNEL_ID and message.author.id == int(os.environ.get("SELF_BOT_USER_ID", "0")):
+        try:
+            # Parse message content (expected format: "Channel: <name>\nContent: <content>\nAttachments: <url>")
+            lines = message.content.split('\n')
+            if len(lines) >= 2:
+                channel_name = lines[0].replace("Channel: ", "")
+                content = lines[1].replace("Content: ", "")
+                attachments = lines[2].replace("Attachments: ", "") if len(lines) > 2 else ""
+                destination = bot.get_channel(DESTINATION_CHANNEL_ID)
+                if destination:
+                    embed = discord.Embed(
+                        title=f"KYBER: {channel_name}",
+                        description=content,
+                        color=0x1E90FF
+                    )
+                    if attachments:
+                        embed.set_image(url=attachments)
+                    await destination.send(embed=embed)
+                    print(f"📢 Relayed message from {channel_name} to destination")
+        except Exception as e:
+            print(f"Failed to relay message: {e}")
         return
 
     content = message.content.lower()
@@ -125,6 +137,10 @@ async def on_message(message):
                     content="⚠️ Inappropriate content detected. A moderator has been notified.",
                     file=discord.File(gif_path)
                 )
+            else:
+                await channel.send(
+                    content="⚠️ Inappropriate content detected. A moderator has been notified."
+                )
         except Exception as e:
             print(f"Failed to handle extreme content: {e}")
         return
@@ -137,50 +153,17 @@ async def on_message(message):
                 content="🔊 Cringe detected!",
                 file=discord.File(file_path)
             )
-            mod_channel = bot.get_channel(MOD_CHANNEL_ID)
-            if mod_channel:
-                await mod_channel.send(
-                    f"⚠️ **Trigger detected in <#{message.channel.id}>**\n"
-                    f"**User:** <@{message.author.id}>\n"
-                    f"**Message:** \"{message.content}\""
-                )
         else:
-            print(f"Audio file missing at: {file_path}")
-
-    # Announcement relaying
-    for name, channel_id in SOURCE_CHANNELS.items():
-        if message.channel.id == channel_id and not message.author.bot:
-            destination = bot.get_channel(DESTINATION_CHANNEL_ID)
-            if destination:
-                if last_posts[name]["message_id"]:
-                    try:
-                        old_message = await destination.fetch_message(last_posts[name]["message_id"])
-                        await old_message.delete()
-                        print(f"🗑️ Deleted repost for {name}")
-                    except discord.NotFound:
-                        print(f"⚠️ Repost for {name} not found")
-                    except discord.Forbidden:
-                        print(f"⚠️ Missing permissions to delete repost for {name}")
-                    last_posts[name]["message_id"] = None
-                image_url = message.attachments[0].url if message.attachments else None
-                last_posts[name] = {
-                    "time": datetime.utcnow(),
-                    "content": message.content,
-                    "image": image_url,
-                    "message_id": None
-                }
-                embed = discord.Embed(
-                    title=f"KYBER: {name}",
-                    description=message.content,
-                    color=0x1E90FF
-                )
-                if image_url:
-                    embed.set_image(url=image_url)
-                repost_message = await destination.send(embed=embed)
-                last_posts[name]["message_id"] = repost_message.id
-                print(f"📢 Posted {name} to destination at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            else:
-                print(f"⚠️ Destination channel {DESTINATION_CHANNEL_ID} not found")
+            await message.channel.send(
+                content="🔊 Cringe detected!"
+            )
+        mod_channel = bot.get_channel(MOD_CHANNEL_ID)
+        if mod_channel:
+            await mod_channel.send(
+                f"⚠️ **Trigger detected in <#{message.channel.id}>**\n"
+                f"**User:** <@{message.author.id}>\n"
+                f"**Message:** \"{message.content}\""
+            )
 
     # Set language command
     if message.content.startswith('!setlang '):

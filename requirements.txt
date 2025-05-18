@@ -1,5 +1,0 @@
-discord.py
-aiohttp
-Flask
-requests
-python-dotenv

@@ -1,5 +1,4 @@
 import discord
-from discord.ext import commands
 import os
 from dotenv import load_dotenv
 
@@ -17,7 +16,7 @@ intents.message_content = True
 intents.messages = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="?", self_bot=True, intents=intents)
+client = discord.Client(intents=intents)
 
 MONITOR_CHANNELS = [
     922533223274250260,
@@ -26,14 +25,14 @@ MONITOR_CHANNELS = [
     1316114620301312052
 ]
 
-@bot.event
+@client.event
 async def on_ready():
-    print(f"[SELF-BOT] Logged in as {bot.user}")
+    print(f"[SELF-BOT] Logged in as {client.user}")
 
-@bot.event
+@client.event
 async def on_message(message):
-    if message.channel.id in MONITOR_CHANNELS and message.author != bot.user:
-        relay_channel = bot.get_channel(RELAY_CHANNEL_ID)
+    if message.channel.id in MONITOR_CHANNELS and message.author != client.user:
+        relay_channel = client.get_channel(RELAY_CHANNEL_ID)
         if relay_channel:
             content = (
                 f"Channel: {message.channel.name}\n"
@@ -45,4 +44,4 @@ async def on_message(message):
         else:
             print(f"⚠️ Relay channel {RELAY_CHANNEL_ID} not found")
 
-bot.run(USER_TOKEN, bot=False)
+client.run(USER_TOKEN)

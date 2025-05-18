@@ -1,7 +1,7 @@
 FROM node:18
 
 # Install Python and pip
-RUN apt-get update && apt-get install -y python3 python3-pip
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
 
 # Set working directory
 WORKDIR /app
@@ -10,9 +10,13 @@ WORKDIR /app
 COPY package.json .
 RUN npm install
 
-# Copy requirements.txt and install Python dependencies
+# Create and activate a Python virtual environment
+RUN python3 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+# Copy requirements.txt and install Python dependencies in the virtual environment
 COPY requirements.txt .
-RUN pip3 install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all files
 COPY . .

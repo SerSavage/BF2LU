@@ -1,17 +1,16 @@
-# listener.py
-from discord.ext import commands
 import discord
-import requests
+from discord.ext import commands
 import os
-
-# Load .env if running locally (safe for development)
 from dotenv import load_dotenv
+
+# Load environment variables
 load_dotenv()
-
-TOKEN = os.environ.get("USER_TOKEN")
-
-if not TOKEN:
+USER_TOKEN = os.environ.get("USER_TOKEN")
+RELAY_CHANNEL_ID = int(os.environ.get("RELAY_CHANNEL_ID", "0"))
+if not USER_TOKEN:
     raise ValueError("USER_TOKEN is not set in environment variables")
+if not RELAY_CHANNEL_ID:
+    raise ValueError("RELAY_CHANNEL_ID is not set in environment variables")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -27,8 +26,6 @@ MONITOR_CHANNELS = [
     1316114620301312052
 ]
 
-WEBHOOK_ENDPOINT = "http://localhost:5001/relay"  # change if needed
-
 @bot.event
 async def on_ready():
     print(f"[SELF-BOT] Logged in as {bot.user}")
@@ -36,15 +33,16 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     if message.channel.id in MONITOR_CHANNELS and message.author != bot.user:
-        payload = {
-            "channel_name": message.channel.name,
-            "content": message.content,
-            "attachments": [a.url for a in message.attachments]
-        }
-        try:
-            requests.post(WEBHOOK_ENDPOINT, json=payload)
+        relay_channel = bot.get_channel(RELAY_CHANNEL_ID)
+        if relay_channel:
+            content = (
+                f"Channel: {message.channel.name}\n"
+                f"Content: {message.content}\n"
+                f"Attachments: {message.attachments[0].url if message.attachments else ''}"
+            )
+            await relay_channel.send(content)
             print(f"🔄 Relayed message from {message.channel.name}")
-        except Exception as e:
-            print(f"Failed to send data to bot relay: {e}")
+        else:
+            print(f"⚠️ Relay channel {RELAY_CHANNEL_ID} not found")
 
-bot.run(TOKEN, bot=False)
+bot.run(USER_TOKEN, bot=False)

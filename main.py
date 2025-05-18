@@ -12,10 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 RELAY_CHANNEL_ID = int(os.environ.get("RELAY_CHANNEL_ID", "0"))
+SELF_BOT_USER_ID = int(os.environ.get("SELF_BOT_USER_ID", "0"))
 if not DISCORD_BOT_TOKEN:
     raise ValueError("DISCORD_BOT_TOKEN is not set in environment variables")
 if not RELAY_CHANNEL_ID:
     raise ValueError("RELAY_CHANNEL_ID is not set in environment variables")
+if not SELF_BOT_USER_ID:
+    raise ValueError("SELF_BOT_USER_ID is not set in environment variables")
 
 # Bot setup
 intents = discord.Intents.default()
@@ -93,7 +96,7 @@ async def on_message(message):
         return
 
     # Handle relayed messages from self-bot
-    if message.channel.id == RELAY_CHANNEL_ID and message.author.id == int(os.environ.get("SELF_BOT_USER_ID", "0")):
+    if message.channel.id == RELAY_CHANNEL_ID and message.author.id == SELF_BOT_USER_ID:
         try:
             # Parse message content (expected format: "Channel: <name>\nContent: <content>\nAttachments: <url>")
             lines = message.content.split('\n')

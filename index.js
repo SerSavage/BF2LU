@@ -4,7 +4,7 @@ const app = express();
 
 // Serve a basic endpoint for uptime monitoring
 app.get('/', (req, res) => {
-  res.send('Bot index.js is running.');
+  res.send('Cringe bot index.js is running.');
 });
 
 // Start server on Render-required port
@@ -23,9 +23,17 @@ const listenerBot = spawn('python3', ['listener.py'], {
   stdio: 'inherit',
 });
 
-// Handle exits
+// Handle process errors and exits
+mainBot.on('error', (err) => {
+  console.error('❌ Failed to start main.py:', err);
+});
+
 mainBot.on('exit', (code) => {
   console.log(`main.py exited with code ${code}`);
+});
+
+listenerBot.on('error', (err) => {
+  console.error('❌ Failed to start listener.py:', err);
 });
 
 listenerBot.on('exit', (code) => {

@@ -1,6 +1,13 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const express = require('express');
 const app = express();
+
+// Install Python dependencies (only once at boot)
+try {
+  execSync('pip install -r requirements.txt', { stdio: 'inherit' });
+} catch (err) {
+  console.error('❌ Failed to install Python dependencies:', err);
+}
 
 // Serve a basic endpoint for uptime monitoring
 app.get('/', (req, res) => {

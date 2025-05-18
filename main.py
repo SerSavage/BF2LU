@@ -5,7 +5,6 @@ import os
 import asyncio
 import aiohttp
 import json
-import requests
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -220,7 +219,7 @@ async def check_announcements():
             embed = discord.Embed(
                 title=f"KYBER: {name} 🔸 No new post in 24h",
                 color=0x1E90FF,
-                description=post["content"
+                description=post["content"]
             )
             if post["image"]:
                 embed.set_image(url=post["image"])

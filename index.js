@@ -1,8 +1,9 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
-const users = require('./users.json');
-const path = require('path');
+const { Translate } = require('@google-cloud/translate').v2;
 require('dotenv').config();
+
+// Initialize Google Cloud Translation API
+const translate = new Translate();
 
 const client = new Client({
   intents: [
@@ -12,6 +13,9 @@ const client = new Client({
     GatewayIntentBits.GuildIntegrations
   ]
 });
+
+// In-memory storage for user language preferences
+const users = {};
 
 // Target channel IDs where the bot will watch for trigger messages
 const targetChannels = [
@@ -109,16 +113,16 @@ client.on('ready', async () => {
     // Start the DISBOARD bump automation
     setInterval(async () => {
       try {
-  const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-  if (channel && channel.isTextBased()) {
-    await channel.send('/bump');
-    console.log(`Test DISBOARD /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-  } else {
-    console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
-  }
-} catch (err) {
-  console.error('Test failed to send DISBOARD /bump:', err);
-}
+        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+        if (channel && channel.isTextBased()) {
+          await channel.send('/bump');
+          console.log(`Sent DISBOARD /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        } else {
+          console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
+        }
+      } catch (err) {
+        console.error('Failed to send DISBOARD /bump:', err);
+      }
     }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
 
     // Manual test trigger for DISBOARD bump
@@ -201,6 +205,28 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
+
+  // Translation logic
+  try {
+    const userLang = users[message.author.id];
+    if (!userLang || userLang === 'unknown') return; // Skip if no language set
+
+    // Detect message language
+    const [detection] = await translate.detect(message.content);
+    const detectedLang = detection.language;
+
+    // Translate if detected language differs from user's preferred language
+    if (detectedLang !== userLang && message.content.trim()) {
+      const [translation] = await translate.translate(message.content, userLang);
+      if (translation && translation.toLowerCase().trim() !== message.content.toLowerCase().trim()) {
+        await message.reply({
+          content: `🌍 **Translated from \`${detectedLang}\` to \`${userLang}\`:**\n> ${translation}`
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Translation error:', err.message);
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -214,7 +240,6 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply('❗ Invalid language code. Allowed: ' + allowedLangs.join(', '));
     }
     users[interaction.user.id] = lang;
-    fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
     await interaction.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
   } else if (interaction.commandName === 'echo') {
     console.log(`Processing /echo for user ${interaction.user.id}`);

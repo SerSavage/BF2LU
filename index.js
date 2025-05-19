@@ -2,7 +2,6 @@ const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = re
 const fs = require('fs');
 const users = require('./users.json');
 const path = require('path');
-const axios = require('axios');
 require('dotenv').config();
 
 const client = new Client({
@@ -107,32 +106,32 @@ client.on('ready', async () => {
     await guild.commands.create(echoCommand);
     console.log(`Registered /echo slash command in guild ${guild.id}`);
 
-    // Start the bump automation
+    // Start the DISBOARD bump automation
     setInterval(async () => {
       try {
         const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
         if (channel && channel.isTextBased()) {
           await channel.send('/bump');
-          console.log(`Sent /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+          console.log(`Sent DISBOARD /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
         } else {
           console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
         }
       } catch (err) {
-        console.error('Failed to send /bump:', err);
+        console.error('Failed to send DISBOARD /bump:', err);
       }
     }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
 
-    // Manual test trigger
+    // Manual test trigger for DISBOARD bump
     try {
       const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-      if (channel && channel.isTextBased()) {
+      if (channel && channel yemekBased()) {
         await channel.send('/bump');
-        console.log(`Test /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        console.log(`Test DISBOARD /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
       } else {
         console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
       }
     } catch (err) {
-      console.error('Test failed to send /bump:', err);
+      console.error('Test failed to send DISBOARD /bump:', err);
     }
   } catch (error) {
     console.error('Failed to register slash commands:', error);
@@ -201,32 +200,6 @@ client.on('messageCreate', async (message) => {
         console.error("Audio file missing at:", filePath);
       }
     }
-  }
-
-  try {
-    const detectRes = await axios.post('https://libretranslate.de/detect', {
-      q: message.content
-    });
-    const detectedLang = detectRes.data?.[0]?.language || 'unknown';
-    const userLang = users[message.author.id] || 'en';
-    if (detectedLang === userLang) return;
-    const transRes = await axios.post('https://libretranslate.de/translate', {
-      q: message.content,
-      source: detectedLang,
-      target: userLang,
-      format: 'text'
-    });
-    const translated = transRes.data.translatedText;
-    if (
-      translated &&
-      translated.toLowerCase().trim() !== message.content.toLowerCase().trim()
-    ) {
-      await message.reply({
-        content: `🌍 **Translated from \`${detectedLang}\` to \`${userLang}\`:**\n> ${translated}`
-      });
-    }
-  } catch (err) {
-    console.error('Translation error:', err.message);
   }
 });
 

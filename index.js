@@ -9,7 +9,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildIntegrations
   ]
 });
 
@@ -66,7 +67,6 @@ const extremeTriggers = [
 
 client.on('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
-  // --- START: Added slash command registration ---
   const command = new SlashCommandBuilder()
     .setName('setlang')
     .setDescription('Set your preferred language')
@@ -76,12 +76,11 @@ client.on('ready', async () => {
         .setRequired(true)
     );
   try {
-    await client.application.commands.create(command);
-    console.log('Registered /setlang slash command');
+    await client.guilds.cache.get('YOUR_GUILD_ID').commands.create(command); // Replace with your guild ID
+    console.log('Registered /setlang slash command in guild YOUR_GUILD_ID');
   } catch (error) {
     console.error('Failed to register slash command:', error);
   }
-  // --- END: Added slash command registration ---
 });
 
 client.on('messageCreate', async (message) => {
@@ -89,7 +88,6 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
-  // Check for extreme/harmful content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;
@@ -122,7 +120,6 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Moderation logic for targeted channels
   if (targetChannels.includes(message.channel.id)) {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
@@ -150,7 +147,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Set Language Command (message-based)
   if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
     const lang = parts[1]?.toLowerCase();
@@ -167,7 +163,43 @@ client.on('messageCreate', async (message) => {
     return message.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
   }
 
-  // Auto-Translate Messages
+  // --- START: Updated echo command to accept a channel ---
+  if (message.content.startsWith('!echo ')) {
+    const args = message.content.slice(6).trim().split(/\s+/); // Split by whitespace
+    if (args.length < 2) {
+      return message.reply('⚠️ Usage: !echo #channel <message> (e.g., !echo #announcements Hello World)');
+    }
+
+    // Extract channel ID from mention (e.g., <#123456789>) or raw ID
+    let targetChannelId = args[0].replace(/<#|>/g, ''); // Remove <# and > from mention
+    if (!/^\d+$/.test(targetChannelId)) {
+      return message.reply('⚠️ Please provide a valid channel (mention the channel or use its ID).');
+    }
+
+    // Extract the message (everything after the channel)
+    const echoMessage = args.slice(1).join(' ').trim();
+    if (!echoMessage) {
+      return message.reply('⚠️ Please provide a message to echo.');
+    }
+
+    try {
+      const targetChannel = await client.channels.fetch(targetChannelId);
+      if (targetChannel && targetChannel.isTextBased()) {
+        await targetChannel.send({
+          content: `📢 **Announcement from <@${message.author.id}>:** ${echoMessage}`
+        });
+        message.reply(`✅ Message echoed to <#${targetChannelId}>!`);
+      } else {
+        message.reply('❌ Target channel not found or is not a text channel.');
+      }
+    } catch (err) {
+      console.error('Failed to echo message:', err);
+      message.reply('❌ An error occurred while echoing the message. Check bot permissions or channel ID.');
+    }
+    return;
+  }
+  // --- END: Updated echo command ---
+
   try {
     const detectRes = await axios.post('https://libretranslate.de/detect', {
       q: message.content
@@ -195,10 +227,11 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// --- START: Added interaction handler for slash commands ---
 client.on('interactionCreate', async (interaction) => {
+  console.log(`Interaction received: ${interaction.type}, Command: ${interaction.commandName || 'none'}`);
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName === 'setlang') {
+    console.log(`Processing /setlang for user ${interaction.user.id}`);
     const lang = interaction.options.getString('language').toLowerCase();
     const allowedLangs = ['en', 'es', 'fr', 'de', 'pt', 'zh', 'ar', 'hi', 'ru', 'ja'];
     if (!allowedLangs.includes(lang)) {
@@ -209,6 +242,5 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
   }
 });
-// --- END: Added interaction handler ---
 
 client.login(process.env.DISCORD_TOKEN);

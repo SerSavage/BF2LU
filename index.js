@@ -1,37 +1,6 @@
-```javascript
-client.on('interactionCreate', async (interaction) => {
-  console.log(`Interaction received: ${interaction.type}, Command: ${interaction.commandName || 'none'}`);
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === 'echo') {
-    console.log(`Processing /echo for user ${interaction.user.id}`);
-    const targetChannel = interaction.options.getChannel('channel');
-    const echoMessage = interaction.options.getString('message');
-    if (!targetChannel.isTextBased()) {
-      return interaction.reply('❌ The specified channel must be a text channel.');
-    }
-    try {
-      await targetChannel.send({
-        content: `📢 **Announcement from <@${interaction.user.id}>:** ${echoMessage}`
-      });
-      await interaction.reply(`✅ Message echoed to <#${targetChannel.id}>!`);
-    } catch (err) {
-      console.error('Failed to echo message:', err.message);
-      await interaction.reply('❌ An error occurred while echoing the message. Check bot permissions.');
-    }
-  }
-});
-```
-
-### Changes Made:
-- Replaced `if (!targetChannel.isTextBased airy())` with `if (!targetChannel.isTextBased())`.
-- The `isTextBased()` method is a valid Discord.js method to check if a channel is text-based, and it does not take any arguments.
-
-### Full Corrected Script:
-Below is the complete corrected script, incorporating the removal of the Kyber news fetching functionality and fixing the syntax error:
-
-<xaiArtifact artifact_id="f714ac79-3979-4efe-9f14-adb474c6e5f1" artifact_version_id="8fdc559b-3365-46b1-94e3-b73b2755ee82" title="index.js" contentType="text/javascript">
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
-const fs = require('fs').promises;
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const client = new Client({
@@ -43,7 +12,7 @@ const client = new Client({
   ]
 });
 
-// Target channel IDs for moderation triggers
+// Target channel IDs where the bot will watch for trigger messages
 const targetChannels = [
   '1361838672818995312',
   '1366888045164499097',
@@ -53,13 +22,10 @@ const targetChannels = [
   '1364277004198875278'
 ];
 
-// Moderation alert channel
+// Channel where moderation alerts should be sent
 const MOD_CHANNEL_ID = '1362988156546449598';
 
-// DISBOARD bump channel
-const BUMP_CHANNEL_ID = '1361848627789828148';
-
-// Keywords for moderation triggers
+// Keywords to trigger the bot
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
   'not funny', 'who asked', 'kill me now', 'this ain\'t it', 'try harder',
@@ -100,7 +66,7 @@ const extremeTriggers = [
 client.on('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   console.log('Guilds the bot is in:', client.guilds.cache.map(guild => `${guild.name} (${guild.id})`));
-  const guild = client.guilds.cache.get('1361838672265089225');
+  const guild = client.guilds.cache.get('1361838672265089225'); // Your guild ID
   if (!guild) {
     console.error('Guild not found. Ensure the bot is in the server and the GUILD_ID is correct.');
     return;
@@ -125,36 +91,8 @@ client.on('ready', async () => {
     console.log('Cleared existing global commands');
     await guild.commands.create(echoCommand);
     console.log(`Registered /echo slash command in guild ${guild.id}`);
-
-    // Start DISBOARD bump reminder
-    setInterval(async () => {
-      try {
-        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
-          await channel.send('Please run /bump to promote the server!');
-          console.log(`Sent DISBOARD bump reminder to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-        } else {
-          console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
-        }
-      } catch (err) {
-        console.error('Failed to send DISBOARD bump reminder:', err.message);
-      }
-    }, 2 * 60 * 60 * 1000); // 2 hours in milliseconds (7200000 ms)
-
-    // Test DISBOARD bump reminder
-    try {
-      const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-      if (channel && channel.isTextBased()) {
-        await channel.send('Test: Please run /bump to promote the server!');
-        console.log(`Test DISBOARD bump reminder sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-      } else {
-        console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
-      }
-    } catch (err) {
-      console.error('Test failed to send DISBOARD bump reminder:', err.message);
-    }
   } catch (error) {
-    console.error('Failed to register slash commands or start services:', error.message);
+    console.error('Failed to register slash commands:', error);
   }
 });
 
@@ -190,7 +128,7 @@ client.on('messageCreate', async (message) => {
         console.error("GIF file missing at:", gifPath);
       }
     } catch (err) {
-      console.error('Failed to handle extreme content:', err.message);
+      console.error('Failed to handle extreme content:', err);
     }
     return;
   }
@@ -214,13 +152,14 @@ client.on('messageCreate', async (message) => {
             });
           }
         } catch (err) {
-          console.error('Failed to send mod alert:', err.message);
+          console.error('Failed to send mod alert:', err);
         }
       } else {
         console.error("Audio file missing at:", filePath);
       }
     }
   }
+  
 });
 
 client.login(process.env.DISCORD_TOKEN);

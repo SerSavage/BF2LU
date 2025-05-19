@@ -67,7 +67,13 @@ const extremeTriggers = [
 
 client.on('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
-  const command = new SlashCommandBuilder()
+  console.log('Guilds the bot is in:', client.guilds.cache.map(guild => `${guild.name} (${guild.id})`));
+  const guild = client.guilds.cache.get('1361838672265089225'); // Your guild ID
+  if (!guild) {
+    console.error('Guild not found. Ensure the bot is in the server and the GUILD_ID is correct.');
+    return;
+  }
+  const setlangCommand = new SlashCommandBuilder()
     .setName('setlang')
     .setDescription('Set your preferred language')
     .addStringOption(option =>
@@ -75,11 +81,30 @@ client.on('ready', async () => {
         .setDescription('Language code (e.g., en, es)')
         .setRequired(true)
     );
+  const echoCommand = new SlashCommandBuilder()
+    .setName('echo')
+    .setDescription('Echo a message to a specified channel')
+    .addChannelOption(option =>
+      option.setName('channel')
+        .setDescription('The channel to send the message to')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('The message to echo')
+        .setRequired(true)
+    );
   try {
-    await client.guilds.cache.get('1361838672265089225').commands.create(command); // Replace with your guild ID
-    console.log('Registered /setlang slash command in guild YOUR_GUILD_ID');
+    await guild.commands.set([]);
+    console.log(`Cleared existing guild commands in guild ${guild.id}`);
+    await client.application.commands.set([]);
+    console.log('Cleared existing global commands');
+    await guild.commands.create(setlangCommand);
+    console.log(`Registered /setlang slash command in guild ${guild.id}`);
+    await guild.commands.create(echoCommand);
+    console.log(`Registered /echo slash command in guild ${guild.id}`);
   } catch (error) {
-    console.error('Failed to register slash command:', error);
+    console.error('Failed to register slash commands:', error);
   }
 });
 
@@ -147,59 +172,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (message.content.startsWith('!setlang ')) {
-    const parts = message.content.trim().split(' ');
-    const lang = parts[1]?.toLowerCase();
-    const allowedLangs = ['en', 'es', 'fr', 'de', 'pt', 'zh', 'ar', 'hi', 'ru', 'ja'];
-    if (!allowedLangs.includes(lang)) {
-      return message.reply('❗ Invalid language code. Allowed: ' + allowedLangs.join(', '));
-    }
-    users[message.author.id] = lang;
-    fs.writeFileSync(
-      path.join(__dirname, 'users.json'),
-      JSON.stringify(users, null, 2),
-      'utf8'
-    );
-    return message.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
-  }
-
-  // --- START: Updated echo command to accept a channel ---
-  if (message.content.startsWith('!echo ')) {
-    const args = message.content.slice(6).trim().split(/\s+/); // Split by whitespace
-    if (args.length < 2) {
-      return message.reply('⚠️ Usage: !echo #channel <message> (e.g., !echo #announcements Hello World)');
-    }
-
-    // Extract channel ID from mention (e.g., <#123456789>) or raw ID
-    let targetChannelId = args[0].replace(/<#|>/g, ''); // Remove <# and > from mention
-    if (!/^\d+$/.test(targetChannelId)) {
-      return message.reply('⚠️ Please provide a valid channel (mention the channel or use its ID).');
-    }
-
-    // Extract the message (everything after the channel)
-    const echoMessage = args.slice(1).join(' ').trim();
-    if (!echoMessage) {
-      return message.reply('⚠️ Please provide a message to echo.');
-    }
-
-    try {
-      const targetChannel = await client.channels.fetch(targetChannelId);
-      if (targetChannel && targetChannel.isTextBased()) {
-        await targetChannel.send({
-          content: `📢 **Announcement from <@${message.author.id}>:** ${echoMessage}`
-        });
-        message.reply(`✅ Message echoed to <#${targetChannelId}>!`);
-      } else {
-        message.reply('❌ Target channel not found or is not a text channel.');
-      }
-    } catch (err) {
-      console.error('Failed to echo message:', err);
-      message.reply('❌ An error occurred while echoing the message. Check bot permissions or channel ID.');
-    }
-    return;
-  }
-  // --- END: Updated echo command ---
-
   try {
     const detectRes = await axios.post('https://libretranslate.de/detect', {
       q: message.content
@@ -240,6 +212,22 @@ client.on('interactionCreate', async (interaction) => {
     users[interaction.user.id] = lang;
     fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
     await interaction.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
+  } else if (interaction.commandName === 'echo') {
+    console.log(`Processing /echo for user ${interaction.user.id}`);
+    const targetChannel = interaction.options.getChannel('channel');
+    const echoMessage = interaction.options.getString('message');
+    if (!targetChannel.isTextBased()) {
+      return interaction.reply('❌ The specified channel must be a text channel.');
+    }
+    try {
+      await targetChannel.send({
+        content: `📢 **Announcement from <@${interaction.user.id}>:** ${echoMessage}`
+      });
+      await interaction.reply(`✅ Message echoed to <#${targetChannel.id}>!`);
+    } catch (err) {
+      console.error('Failed to echo message:', err);
+      await interaction.reply('❌ An error occurred while echoing the message. Check bot permissions.');
+    }
   }
 });
 

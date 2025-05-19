@@ -223,26 +223,4 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-client.on('interactionCreate', async (interaction) => {
-  console.log(`Interaction received: ${interaction.type}, Command: ${interaction.commandName || 'none'}`);
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === 'echo') {
-    console.log(`Processing /echo for user ${interaction.user.id}`);
-    const targetChannel = interaction.options.getChannel('channel');
-    const echoMessage = interaction.options.getString('message');
-    if (!targetChannel.isTextBased()) {
-      return interaction.reply('❌ The specified channel must be a text channel.');
-    }
-    try {
-      await targetChannel.send({
-        content: `📢 **Announcement from <@${interaction.user.id}>:** ${echoMessage}`
-      });
-      await interaction.reply(`✅ Message echoed to <#${targetChannel.id}>!`);
-    } catch (err) {
-      console.error('Failed to echo message:', err.message);
-      await interaction.reply('❌ An error occurred while echoing the message. Check bot permissions.');
-    }
-  }
-});
-
 client.login(process.env.DISCORD_TOKEN);

@@ -1,9 +1,5 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
-const { Translate } = require('@google-cloud/translate').v2;
 require('dotenv').config();
-
-// Initialize Google Cloud Translation API
-const translate = new Translate();
 
 const client = new Client({
   intents: [
@@ -13,9 +9,6 @@ const client = new Client({
     GatewayIntentBits.GuildIntegrations
   ]
 });
-
-// In-memory storage for user language preferences
-const users = {};
 
 // Target channel IDs where the bot will watch for trigger messages
 const targetChannels = [
@@ -79,14 +72,6 @@ client.on('ready', async () => {
     console.error('Guild not found. Ensure the bot is in the server and the GUILD_ID is correct.');
     return;
   }
-  const setlangCommand = new SlashCommandBuilder()
-    .setName('setlang')
-    .setDescription('Set your preferred language')
-    .addStringOption(option =>
-      option.setName('language')
-        .setDescription('Language code (e.g., en, es)')
-        .setRequired(true)
-    );
   const echoCommand = new SlashCommandBuilder()
     .setName('echo')
     .setDescription('Echo a message to a specified channel')
@@ -105,8 +90,6 @@ client.on('ready', async () => {
     console.log(`Cleared existing guild commands in guild ${guild.id}`);
     await client.application.commands.set([]);
     console.log('Cleared existing global commands');
-    await guild.commands.create(setlangCommand);
-    console.log(`Registered /setlang slash command in guild ${guild.id}`);
     await guild.commands.create(echoCommand);
     console.log(`Registered /echo slash command in guild ${guild.id}`);
 
@@ -205,43 +188,12 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
-
-  // Translation logic
-  try {
-    const userLang = users[message.author.id];
-    if (!userLang || userLang === 'unknown') return; // Skip if no language set
-
-    // Detect message language
-    const [detection] = await translate.detect(message.content);
-    const detectedLang = detection.language;
-
-    // Translate if detected language differs from user's preferred language
-    if (detectedLang !== userLang && message.content.trim()) {
-      const [translation] = await translate.translate(message.content, userLang);
-      if (translation && translation.toLowerCase().trim() !== message.content.toLowerCase().trim()) {
-        await message.reply({
-          content: `🌍 **Translated from \`${detectedLang}\` to \`${userLang}\`:**\n> ${translation}`
-        });
-      }
-    }
-  } catch (err) {
-    console.error('Translation error:', err.message);
-  }
 });
 
 client.on('interactionCreate', async (interaction) => {
   console.log(`Interaction received: ${interaction.type}, Command: ${interaction.commandName || 'none'}`);
   if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName === 'setlang') {
-    console.log(`Processing /setlang for user ${interaction.user.id}`);
-    const lang = interaction.options.getString('language').toLowerCase();
-    const allowedLangs = ['en', 'es', 'fr', 'de', 'pt', 'zh', 'ar', 'hi', 'ru', 'ja'];
-    if (!allowedLangs.includes(lang)) {
-      return interaction.reply('❗ Invalid language code. Allowed: ' + allowedLangs.join(', '));
-    }
-    users[interaction.user.id] = lang;
-    await interaction.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
-  } else if (interaction.commandName === 'echo') {
+  if (interaction.commandName === 'echo') {
     console.log(`Processing /echo for user ${interaction.user.id}`);
     const targetChannel = interaction.options.getChannel('channel');
     const echoMessage = interaction.options.getString('message');

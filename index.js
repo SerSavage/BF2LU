@@ -25,6 +25,9 @@ const targetChannels = [
 // Channel where moderation alerts should be sent
 const MOD_CHANNEL_ID = '1362988156546449598';
 
+// Bump channel ID
+const BUMP_CHANNEL_ID = '1361848627789828148';
+
 // Keywords to trigger the bot
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
@@ -93,6 +96,21 @@ client.on('ready', async () => {
     console.log(`Registered /echo slash command in guild ${guild.id}`);
   } catch (error) {
     console.error('Failed to register slash commands:', error);
+
+        // Start the bump automation
+    setInterval(async () => {
+      try {
+        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+        if (channel && channel.isTextBased()) {
+          await channel.send('/bump');
+          console.log(`Sent /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        } else {
+          console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
+        }
+      } catch (err) {
+        console.error('Failed to send /bump:', err);
+      }
+    }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
   }
 });
 

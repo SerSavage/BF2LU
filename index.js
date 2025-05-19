@@ -121,6 +121,19 @@ client.on('ready', async () => {
         console.error('Failed to send /bump:', err);
       }
     }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
+
+    // Manual test trigger
+    try {
+      const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+      if (channel && channel.isTextBased()) {
+        await channel.send('/bump');
+        console.log(`Test /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+      } else {
+        console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
+      }
+    } catch (err) {
+      console.error('Test failed to send /bump:', err);
+    }
   } catch (error) {
     console.error('Failed to register slash commands:', error);
   }

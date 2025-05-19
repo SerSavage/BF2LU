@@ -76,7 +76,7 @@ client.on('ready', async () => {
         .setRequired(true)
     );
   try {
-    await client.guilds.cache.get('YOUR_GUILD_ID').commands.create(command); // Replace with your guild ID
+    await client.guilds.cache.get('1361838672265089225').commands.create(command); // Replace with your guild ID
     console.log('Registered /setlang slash command in guild YOUR_GUILD_ID');
   } catch (error) {
     console.error('Failed to register slash command:', error);

@@ -124,7 +124,7 @@ client.on('ready', async () => {
     // Manual test trigger for DISBOARD bump
     try {
       const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-      if (channel && channel isTextBased()) {
+      if (channel && channel.isTextBased()) {
         await channel.send('/bump');
         console.log(`Test DISBOARD /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
       } else {

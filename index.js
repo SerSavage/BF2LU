@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const { google } = require('googleapis');
 const schedule = require('node-schedule');
+const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
@@ -78,6 +79,49 @@ const extremeTriggers = [
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
 
+// --- Language Preferences ---
+const LANGUAGE_FILE = './languagePreferences.json';
+const SUPPORTED_LANGUAGES = {
+  'en': 'English',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'ja': 'Japanese',
+  'zh': 'Chinese',
+  'ru': 'Russian',
+  'pt': 'Portuguese',
+  'it': 'Italian',
+  'ko': 'Korean'
+};
+
+// Load or initialize language preferences
+let languagePreferences = {};
+if (fs.existsSync(LANGUAGE_FILE)) {
+  languagePreferences = JSON.parse(fs.readFileSync(LANGUAGE_FILE));
+} else {
+  fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}));
+}
+
+// Save language preferences
+function saveLanguagePreferences() {
+  fs.writeFileSync(LANGUAGE_FILE, JSON.stringify(languagePreferences, null, 2));
+}
+
+// Translate text using LibreTranslate
+async function translateText(text, targetLang, sourceLang = 'auto') {
+  try {
+    const response = await axios.post('https://translate.argosopentech.com/translate', {
+      q: text,
+      source: sourceLang,
+      target: targetLang
+    });
+    return response.data.translatedText;
+  } catch (error) {
+    console.error('Translation error:', error);
+    throw new Error('Failed to translate text');
+  }
+}
+
 // --- Google Drive Setup ---
 const auth = new google.auth.GoogleAuth({
   credentials: process.env.GOOGLE_CREDENTIALS ? JSON.parse(process.env.GOOGLE_CREDENTIALS) : undefined,
@@ -89,6 +133,9 @@ const drive = google.drive({ version: 'v3', auth });
 // Function to watch a Google Drive folder
 async function watchFolder(folderId) {
   try {
+    if (!process.env.WEBHOOK_URL || !process.env.WEBHOOK_URL.startsWith('https://')) {
+      throw new Error('WEBHOOK_URL must be a valid HTTPS URL');
+    }
     const res = await drive.files.watch({
       fileId: folderId,
       requestBody: {
@@ -132,9 +179,9 @@ app.post('/notify', async (req, res) => {
       const channel = client.channels.cache.get(GOOGLE_DRIVE_CHANNEL_ID);
       if (channel && channel.isTextBased()) {
         await channel.send(
-          `📢 **New Update https://discord.com/channels/1361838672265089225/1362198914207449368 / or Google Drive link below - Check it out!**\n` +
+          `📢 **New Update for WIP has arrived - Check it out!**\n` +
           `**File:** ${file.data.name}\n` +
-          `**Link:** ${GOOGLE_DRIVE_FOLDER_URL}`
+          `**Link:** ${file.data.webViewLink}` // Use file link instead of folder
         );
       }
     }
@@ -151,7 +198,7 @@ app.listen(PORT, () => {
   console.log(`Webhook server running on port ${PORT}`);
 });
 
-// --- Existing Bot Logic ---
+// --- Bot Logic ---
 client.on('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   console.log('Guilds the bot is in:', client.guilds.cache.map(guild => `${guild.name} (${guild.id})`));
@@ -160,6 +207,8 @@ client.on('ready', async () => {
     console.error('Guild not found. Ensure the bot is in the server and the GUILD_ID is correct.');
     return;
   }
+
+  // Slash commands
   const echoCommand = new SlashCommandBuilder()
     .setName('echo')
     .setDescription('Echo a message to a specified channel')
@@ -173,13 +222,63 @@ client.on('ready', async () => {
         .setDescription('The message to echo')
         .setRequired(true)
     );
+
+  const translateCommand = new SlashCommandBuilder()
+    .setName('translate')
+    .setDescription('Translate a message to a target language')
+    .addStringOption(option =>
+      option.setName('text')
+        .setDescription('The text to translate')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('language')
+        .setDescription('Target language code (e.g., es for Spanish)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'English', value: 'en' },
+          { name: 'Spanish', value: 'es' },
+          { name: 'French', value: 'fr' },
+          { name: 'German', value: 'de' },
+          { name: 'Japanese', value: 'ja' },
+          { name: 'Chinese', value: 'zh' },
+          { name: 'Russian', value: 'ru' },
+          { name: 'Portuguese', value: 'pt' },
+          { name: 'Italian', value: 'it' },
+          { name: 'Korean', value: 'ko' }
+        )
+    );
+
+  const setLanguageCommand = new SlashCommandBuilder()
+    .setName('setlanguage')
+    .setDescription('Set your preferred language')
+    .addStringOption(option =>
+      option.setName('language')
+        .setDescription('Preferred language code (e.g., es for Spanish)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'English', value: 'en' },
+          { name: 'Spanish', value: 'es' },
+          { name: 'French', value: 'fr' },
+          { name: 'German', value: 'de' },
+          { name: 'Japanese', value: 'ja' },
+          { name: 'Chinese', value: 'zh' },
+          { name: 'Russian', value: 'ru' },
+          { name: 'Portuguese', value: 'pt' },
+          { name: 'Italian', value: 'it' },
+          { name: 'Korean', value: 'ko' }
+        )
+    );
+
   try {
     await guild.commands.set([]);
     console.log(`Cleared existing guild commands in guild ${guild.id}`);
     await client.application.commands.set([]);
     console.log('Cleared existing global commands');
     await guild.commands.create(echoCommand);
-    console.log(`Registered /echo slash command in guild ${guild.id}`);
+    await guild.commands.create(translateCommand);
+    await guild.commands.create(setLanguageCommand);
+    console.log(`Registered /echo, /translate, and /setlanguage slash commands in guild ${guild.id}`);
   } catch (error) {
     console.error('Failed to register slash commands:', error);
   }
@@ -208,11 +307,50 @@ client.on('ready', async () => {
   }
 });
 
+// Handle slash command interactions
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName, options } = interaction;
+
+  if (commandName === 'echo') {
+    const channel = options.getChannel('channel');
+    const message = options.getString('message');
+    try {
+      if (channel.isTextBased()) {
+        await channel.send(message);
+        await interaction.reply({ content: `Message sent to ${channel}!`, ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Please select a text channel.', ephemeral: true });
+      }
+    } catch (error) {
+      console.error('Error handling /echo:', error);
+      await interaction.reply({ content: 'Failed to send message.', ephemeral: true });
+    }
+  } else if (commandName === 'translate') {
+    const text = options.getString('text');
+    const targetLang = options.getString('language');
+    try {
+      const translatedText = await translateText(text, targetLang);
+      await interaction.reply(`**Original:** ${text}\n**Translated (${SUPPORTED_LANGUAGES[targetLang]}):** ${translatedText}`);
+    } catch (error) {
+      await interaction.reply({ content: 'Failed to translate text.', ephemeral: true });
+    }
+  } else if (commandName === 'setlanguage') {
+    const language = options.getString('language');
+    languagePreferences[interaction.user.id] = language;
+    saveLanguagePreferences();
+    await interaction.reply(`Preferred language set to ${SUPPORTED_LANGUAGES[language]}.`);
+  }
+});
+
+// Auto-translate messages based on user preferences
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
 
+  // Existing moderation logic
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;
@@ -269,6 +407,17 @@ client.on('messageCreate', async (message) => {
       } else {
         console.error("Audio file missing at:", filePath);
       }
+    }
+  }
+
+  // Auto-translate for users with preferences
+  const userLang = languagePreferences[message.author.id];
+  if (userLang && userLang !== 'en') {
+    try {
+      const translatedText = await translateText(message.content, userLang);
+      await message.reply(`**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
+    } catch (error) {
+      console.error('Auto-translation error:', error);
     }
   }
 });

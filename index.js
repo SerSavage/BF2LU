@@ -1,7 +1,13 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
+const { google } = require('googleapis');
+const schedule = require('node-schedule');
 require('dotenv').config();
+
+const app = express();
+app.use(express.json());
 
 const client = new Client({
   intents: [
@@ -27,6 +33,12 @@ const MOD_CHANNEL_ID = '1362988156546449598';
 
 // Bump channel ID
 const BUMP_CHANNEL_ID = '1361848627789828148';
+
+// Google Drive notification channel ID (add to .env as GOOGLE_DRIVE_CHANNEL_ID)
+const GOOGLE_DRIVE_CHANNEL_ID = process.env.GOOGLE_DRIVE_CHANNEL_ID;
+
+// Google Drive folder URL for notifications
+const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/u/2/folders/139urJMaf1NgqQb6CgrnPrqEDZT0DoE0b';
 
 // Keywords to trigger the bot
 const triggers = [
@@ -66,6 +78,75 @@ const extremeTriggers = [
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
 
+// --- Google Drive Setup ---
+const auth = new google.auth.GoogleAuth({
+  keyFile: './credentials.json', // Google API credentials
+  scopes: ['https://www.googleapis.com/auth/drive'],
+});
+const drive = google.drive({ version: 'v3', auth });
+
+// Function to watch a Google Drive folder
+async function watchFolder(folderId) {
+  try {
+    const res = await drive.files.watch({
+      fileId: folderId,
+      requestBody: {
+        kind: 'api#channel',
+        id: `channel-${Date.now()}`,
+        type: 'web_hook',
+        address: process.env.WEBHOOK_URL, // e.g., https://your-app.onrender.com/notify
+      },
+    });
+    console.log('Watching folder:', res.data);
+    return res.data;
+  } catch (error) {
+    console.error('Error setting up watch:', error);
+  }
+}
+
+// Schedule watch renewal every 6 days
+schedule.scheduleJob('0 0 */6 * *', async () => {
+  console.log('Renewing Google Drive watch subscription');
+  await watchFolder(process.env.GOOGLE_DRIVE_FOLDER_ID);
+});
+
+// Webhook endpoint for Google Drive notifications
+app.post('/notify', async (req, res) => {
+  try {
+    const fileId = req.body.resourceId?.id;
+    if (!fileId) return res.status(400).send('Invalid notification');
+
+    // Get file metadata
+    const file = await drive.files.get({
+      fileId,
+      fields: 'id,name,webViewLink,permissions',
+    });
+
+    // Check if file has a shared link
+    if (file.data.webViewLink) {
+      const channel = client.channels.cache.get(GOOGLE_DRIVE_CHANNEL_ID);
+      if (channel && channel.isTextBased()) {
+        await channel.send(
+          `📢 **New Update for WIP has arrived - Check it out!**\n` +
+          `**File:** ${file.data.name}\n` +
+          `**Link:** ${GOOGLE_DRIVE_FOLDER_URL}`
+        );
+      }
+    }
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// Start Express server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Webhook server running on port ${PORT}`);
+});
+
+// --- Existing Bot Logic ---
 client.on('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   console.log('Guilds the bot is in:', client.guilds.cache.map(guild => `${guild.name} (${guild.id})`));
@@ -96,21 +177,29 @@ client.on('ready', async () => {
     console.log(`Registered /echo slash command in guild ${guild.id}`);
   } catch (error) {
     console.error('Failed to register slash commands:', error);
+  }
 
-        // Start the bump automation
-    setInterval(async () => {
-      try {
-        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
-          await channel.send('/bump');
-          console.log(`Sent /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-        } else {
-          console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
-        }
-      } catch (err) {
-        console.error('Failed to send /bump:', err);
+  // Start the bump automation
+  setInterval(async () => {
+    try {
+      const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+      if (channel && channel.isTextBased()) {
+        await channel.send('/bump');
+        console.log(`Sent /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+      } else {
+        console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
       }
-    }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
+    } catch (err) {
+      console.error('Failed to send /bump:', err);
+    }
+  }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
+
+  // Start watching Google Drive folder
+  try {
+    await watchFolder(process.env.GOOGLE_DRIVE_FOLDER_ID);
+    console.log(`Started watching Google Drive folder ${process.env.GOOGLE_DRIVE_FOLDER_ID}`);
+  } catch (error) {
+    console.error('Failed to start watching Google Drive folder:', error);
   }
 });
 
@@ -161,7 +250,8 @@ client.on('messageCreate', async (message) => {
           files: [audioFile]
         });
         try {
-          const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
+          const modChannel = await client.channels.fetch(MOD_CHANNEL_ID 
+);
           if (modChannel && modChannel.isTextBased()) {
             await modChannel.send({
               content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n` +
@@ -177,7 +267,6 @@ client.on('messageCreate', async (message) => {
       }
     }
   }
-  
 });
 
 client.login(process.env.DISCORD_TOKEN);

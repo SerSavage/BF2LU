@@ -26,6 +26,9 @@ const MOD_CHANNEL_ID = '1362988156546449598';
 // Bump channel ID
 const BUMP_CHANNEL_ID = '1361848627789828148';
 
+// DISBOARD application ID (replace with actual ID if different)
+const DISBOARD_APP_ID = '302050872383242240';
+
 // Keywords to trigger the bot
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
@@ -98,13 +101,30 @@ client.on('ready', async () => {
       try {
         const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
         if (channel && channel.isTextBased()) {
-          await channel.send('/bump');
-          console.log(`Sent DISBOARD /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+          // Fetch DISBOARD's commands
+          const commands = await guild.commands.fetch();
+          const bumpCommand = commands.find(cmd => cmd.name === 'bump' && cmd.applicationId === DISBOARD_APP_ID);
+          if (bumpCommand) {
+            // Execute DISBOARD's /bump command
+            await channel.sendSlash(DISBOARD_APP_ID, 'bump');
+            console.log(`Sent DISBOARD /bump command to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+          } else {
+            console.error(`DISBOARD /bump command not found in guild ${guild.id}`);
+            await channel.send('⚠️ Could not execute /bump. Please run /bump manually or check DISBOARD setup.');
+          }
         } else {
           console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
         }
       } catch (err) {
         console.error('Failed to send DISBOARD /bump:', err);
+        try {
+          const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+          if (channel && channel.isTextBased()) {
+            await channel.send('⚠️ Error executing /bump. Please run /bump manually.');
+          }
+        } catch (fallbackErr) {
+          console.error('Failed to send fallback message:', fallbackErr);
+        }
       }
     }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
 
@@ -112,13 +132,28 @@ client.on('ready', async () => {
     try {
       const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
       if (channel && channel.isTextBased()) {
-        await channel.send('/bump');
-        console.log(`Test DISBOARD /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        const commands = await guild.commands.fetch();
+        const bumpCommand = commands.find(cmd => cmd.name === 'bump' && cmd.applicationId === DISBOARD_APP_ID);
+        if (bumpCommand) {
+          await channel.sendSlash(DISBOARD_APP_ID, 'bump');
+          console.log(`Test DISBOARD /bump command sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        } else {
+          console.error(`Test failed: DISBOARD /bump command not found in guild ${guild.id}`);
+          await channel.send('⚠️ Test failed: Could not execute /bump. Please run /bump manually or check DISBOARD setup.');
+        }
       } else {
         console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
       }
     } catch (err) {
       console.error('Test failed to send DISBOARD /bump:', err);
+      try {
+        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+        if (channel && channel.isTextBased()) {
+          await channel.send('⚠️ Test error: Could not execute /bump. Please run /bump manually.');
+        }
+      } catch (fallbackErr) {
+        console.error('Test failed to send fallback message:', fallbackErr);
+      }
     }
   } catch (error) {
     console.error('Failed to register slash commands:', error);

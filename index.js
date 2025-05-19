@@ -1,6 +1,4 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
-const axios = require('axios');
-const cheerio = require('cheerio');
 const fs = require('fs').promises;
 require('dotenv').config();
 
@@ -28,12 +26,6 @@ const MOD_CHANNEL_ID = '1362988156546449598';
 
 // DISBOARD bump channel
 const BUMP_CHANNEL_ID = '1361848627789828148';
-
-// Kyber news channel
-const NEWS_CHANNEL_ID = '1363367257010606231';
-
-// File to store last posted Kyber news article
-const LAST_POST_FILE = './last_post.json';
 
 // Keywords for moderation triggers
 const triggers = [
@@ -129,50 +121,6 @@ client.on('ready', async () => {
     } catch (err) {
       console.error('Test failed to send DISBOARD bump reminder:', err.message);
     }
-
-    // Start Kyber news fetching
-    const fetchKyberNews = async () => {
-      try {
-        const response = await axios.get('https://kyber.gg/news/');
-        const $ = cheerio.load(response.data);
-        const articles = [];
-        $('.blog-post').each((i, element) => {
-          const title = $(element).find('.blog-post-title a').text().trim();
-          const link = $(element).find('.blog-post-title a').attr('href');
-          const date = $(element).find('.blog-post-meta').text().trim();
-          if (title && link && date) {
-            articles.push({ title, link: `https://kyber.gg${link}`, date });
-          }
-        });
-        if (articles.length === 0) {
-          console.log('No Kyber news articles found');
-          return;
-        }
-        const latestArticle = articles[0]; // Assume first article is newest
-        let lastPost = {};
-        try {
-          lastPost = JSON.parse(await fs.readFile(LAST_POST_FILE, 'utf8'));
-        } catch (err) {
-          if (err.code !== 'ENOENT') console.error('Error reading last_post.json:', err.message);
-        }
-        if (lastPost.title !== latestArticle.title || lastPost.link !== latestArticle.link) {
-          const channel = await client.channels.fetch(NEWS_CHANNEL_ID);
-          if (channel && channel.isTextBased()) {
-            await channel.send({
-              content: `📰 **New Kyber News Update**\n**${latestArticle.title}**\n📅 ${latestArticle.date}\n🔗 ${latestArticle.link}`
-            });
-            console.log(`Posted Kyber news to channel ${NEWS_CHANNEL_ID}: ${latestArticle.title}`);
-            await fs.writeFile(LAST_POST_FILE, JSON.stringify(latestArticle, null, 2));
-          } else {
-            console.error(`News channel ${NEWS_CHANNEL_ID} not found or not text-based`);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch Kyber news:', err.message);
-      }
-    };
-    setInterval(fetchKyberNews, 45 * 24 * 60 * 60 * 1000); // 45 days in milliseconds (3888000000 ms)
-    await fetchKyberNews(); // Run once on startup
   } catch (error) {
     console.error('Failed to register slash commands or start services:', error.message);
   }
@@ -250,7 +198,7 @@ client.on('interactionCreate', async (interaction) => {
     console.log(`Processing /echo for user ${interaction.user.id}`);
     const targetChannel = interaction.options.getChannel('channel');
     const echoMessage = interaction.options.getString('message');
-    if (!targetChannel.isTextBased()) {
+    if (!targetChannel.isTextBased airy()) {
       return interaction.reply('❌ The specified channel must be a text channel.');
     }
     try {

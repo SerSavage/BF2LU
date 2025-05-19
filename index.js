@@ -1,4 +1,7 @@
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const fs = require('fs').promises;
 require('dotenv').config();
 
 const client = new Client({
@@ -10,7 +13,7 @@ const client = new Client({
   ]
 });
 
-// Target channel IDs where the bot will watch for trigger messages
+// Target channel IDs for moderation triggers
 const targetChannels = [
   '1361838672818995312',
   '1366888045164499097',
@@ -20,16 +23,19 @@ const targetChannels = [
   '1364277004198875278'
 ];
 
-// Channel where moderation alerts should be sent
+// Moderation alert channel
 const MOD_CHANNEL_ID = '1362988156546449598';
 
-// Bump channel ID
+// DISBOARD bump channel
 const BUMP_CHANNEL_ID = '1361848627789828148';
 
-// DISBOARD application ID (replace with actual ID if different)
-const DISBOARD_APP_ID = '302050872383242240';
+// Kyber news channel
+const NEWS_CHANNEL_ID = '1363367257010606231';
 
-// Keywords to trigger the bot
+// File to store last posted Kyber news article
+const LAST_POST_FILE = './last_post.json';
+
+// Keywords for moderation triggers
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
   'not funny', 'who asked', 'kill me now', 'this ain\'t it', 'try harder',
@@ -96,67 +102,79 @@ client.on('ready', async () => {
     await guild.commands.create(echoCommand);
     console.log(`Registered /echo slash command in guild ${guild.id}`);
 
-    // Start the DISBOARD bump automation
+    // Start DISBOARD bump reminder
     setInterval(async () => {
       try {
         const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
         if (channel && channel.isTextBased()) {
-          // Fetch DISBOARD's commands
-          const commands = await guild.commands.fetch();
-          const bumpCommand = commands.find(cmd => cmd.name === 'bump' && cmd.applicationId === DISBOARD_APP_ID);
-          if (bumpCommand) {
-            // Execute DISBOARD's /bump command
-            await channel.sendSlash(DISBOARD_APP_ID, 'bump');
-            console.log(`Sent DISBOARD /bump command to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-          } else {
-            console.error(`DISBOARD /bump command not found in guild ${guild.id}`);
-            await channel.send('⚠️ Could not execute /bump. Please run /bump manually or check DISBOARD setup.');
-          }
+          await channel.send('Please run /bump to promote the server!');
+          console.log(`Sent DISBOARD bump reminder to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
         } else {
           console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
         }
       } catch (err) {
-        console.error('Failed to send DISBOARD /bump:', err);
-        try {
-          const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-          if (channel && channel.isTextBased()) {
-            await channel.send('⚠️ Error executing /bump. Please run /bump manually.');
-          }
-        } catch (fallbackErr) {
-          console.error('Failed to send fallback message:', fallbackErr);
-        }
+        console.error('Failed to send DISBOARD bump reminder:', err.message);
       }
-    }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
+    }, 2 * 60 * 60 * 1000); // 2 hours in milliseconds (7200000 ms)
 
-    // Manual test trigger for DISBOARD bump
+    // Test DISBOARD bump reminder
     try {
       const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
       if (channel && channel.isTextBased()) {
-        const commands = await guild.commands.fetch();
-        const bumpCommand = commands.find(cmd => cmd.name === 'bump' && cmd.applicationId === DISBOARD_APP_ID);
-        if (bumpCommand) {
-          await channel.sendSlash(DISBOARD_APP_ID, 'bump');
-          console.log(`Test DISBOARD /bump command sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-        } else {
-          console.error(`Test failed: DISBOARD /bump command not found in guild ${guild.id}`);
-          await channel.send('⚠️ Test failed: Could not execute /bump. Please run /bump manually or check DISBOARD setup.');
-        }
+        await channel.send('Test: Please run /bump to promote the server!');
+        console.log(`Test DISBOARD bump reminder sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
       } else {
         console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
       }
     } catch (err) {
-      console.error('Test failed to send DISBOARD /bump:', err);
-      try {
-        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
-          await channel.send('⚠️ Test error: Could not execute /bump. Please run /bump manually.');
-        }
-      } catch (fallbackErr) {
-        console.error('Test failed to send fallback message:', fallbackErr);
-      }
+      console.error('Test failed to send DISBOARD bump reminder:', err.message);
     }
+
+    // Start Kyber news fetching
+    const fetchKyberNews = async () => {
+      try {
+        const response = await axios.get('https://kyber.gg/news/');
+        const $ = cheerio.load(response.data);
+        const articles = [];
+        $('.blog-post').each((i, element) => {
+          const title = $(element).find('.blog-post-title a').text().trim();
+          const link = $(element).find('.blog-post-title a').attr('href');
+          const date = $(element).find('.blog-post-meta').text().trim();
+          if (title && link && date) {
+            articles.push({ title, link: `https://kyber.gg${link}`, date });
+          }
+        });
+        if (articles.length === 0) {
+          console.log('No Kyber news articles found');
+          return;
+        }
+        const latestArticle = articles[0]; // Assume first article is newest
+        let lastPost = {};
+        try {
+          lastPost = JSON.parse(await fs.readFile(LAST_POST_FILE, 'utf8'));
+        } catch (err) {
+          if (err.code !== 'ENOENT') console.error('Error reading last_post.json:', err.message);
+        }
+        if (lastPost.title !== latestArticle.title || lastPost.link !== latestArticle.link) {
+          const channel = await client.channels.fetch(NEWS_CHANNEL_ID);
+          if (channel && channel.isTextBased()) {
+            await channel.send({
+              content: `📰 **New Kyber News Update**\n**${latestArticle.title}**\n📅 ${latestArticle.date}\n🔗 ${latestArticle.link}`
+            });
+            console.log(`Posted Kyber news to channel ${NEWS_CHANNEL_ID}: ${latestArticle.title}`);
+            await fs.writeFile(LAST_POST_FILE, JSON.stringify(latestArticle, null, 2));
+          } else {
+            console.error(`News channel ${NEWS_CHANNEL_ID} not found or not text-based`);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch Kyber news:', err.message);
+      }
+    };
+    setInterval(fetchKyberNews, 45 * 24 * 60 * 60 * 1000); // 45 days in milliseconds (3888000000 ms)
+    await fetchKyberNews(); // Run once on startup
   } catch (error) {
-    console.error('Failed to register slash commands:', error);
+    console.error('Failed to register slash commands or start services:', error.message);
   }
 });
 
@@ -192,7 +210,7 @@ client.on('messageCreate', async (message) => {
         console.error("GIF file missing at:", gifPath);
       }
     } catch (err) {
-      console.error('Failed to handle extreme content:', err);
+      console.error('Failed to handle extreme content:', err.message);
     }
     return;
   }
@@ -216,7 +234,7 @@ client.on('messageCreate', async (message) => {
             });
           }
         } catch (err) {
-          console.error('Failed to send mod alert:', err);
+          console.error('Failed to send mod alert:', err.message);
         }
       } else {
         console.error("Audio file missing at:", filePath);
@@ -241,7 +259,7 @@ client.on('interactionCreate', async (interaction) => {
       });
       await interaction.reply(`✅ Message echoed to <#${targetChannel.id}>!`);
     } catch (err) {
-      console.error('Failed to echo message:', err);
+      console.error('Failed to echo message:', err.message);
       await interaction.reply('❌ An error occurred while echoing the message. Check bot permissions.');
     }
   }

@@ -109,16 +109,16 @@ client.on('ready', async () => {
     // Start the DISBOARD bump automation
     setInterval(async () => {
       try {
-        const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-        if (channel && channel.isTextBased()) {
-          await channel.send('/bump');
-          console.log(`Sent DISBOARD /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
-        } else {
-          console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
-        }
-      } catch (err) {
-        console.error('Failed to send DISBOARD /bump:', err);
-      }
+  const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+  if (channel && channel.isTextBased()) {
+    await channel.send('/bump');
+    console.log(`Test DISBOARD /bump sent to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+  } else {
+    console.error(`Test failed: Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
+  }
+} catch (err) {
+  console.error('Test failed to send DISBOARD /bump:', err);
+}
     }, 3 * 60 * 60 * 1000); // 3 hours in milliseconds (10800000 ms)
 
     // Manual test trigger for DISBOARD bump

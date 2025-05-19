@@ -1,3 +1,35 @@
+```javascript
+client.on('interactionCreate', async (interaction) => {
+  console.log(`Interaction received: ${interaction.type}, Command: ${interaction.commandName || 'none'}`);
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName === 'echo') {
+    console.log(`Processing /echo for user ${interaction.user.id}`);
+    const targetChannel = interaction.options.getChannel('channel');
+    const echoMessage = interaction.options.getString('message');
+    if (!targetChannel.isTextBased()) {
+      return interaction.reply('❌ The specified channel must be a text channel.');
+    }
+    try {
+      await targetChannel.send({
+        content: `📢 **Announcement from <@${interaction.user.id}>:** ${echoMessage}`
+      });
+      await interaction.reply(`✅ Message echoed to <#${targetChannel.id}>!`);
+    } catch (err) {
+      console.error('Failed to echo message:', err.message);
+      await interaction.reply('❌ An error occurred while echoing the message. Check bot permissions.');
+    }
+  }
+});
+```
+
+### Changes Made:
+- Replaced `if (!targetChannel.isTextBased airy())` with `if (!targetChannel.isTextBased())`.
+- The `isTextBased()` method is a valid Discord.js method to check if a channel is text-based, and it does not take any arguments.
+
+### Full Corrected Script:
+Below is the complete corrected script, incorporating the removal of the Kyber news fetching functionality and fixing the syntax error:
+
+<xaiArtifact artifact_id="f714ac79-3979-4efe-9f14-adb474c6e5f1" artifact_version_id="8fdc559b-3365-46b1-94e3-b73b2755ee82" title="index.js" contentType="text/javascript">
 const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs').promises;
 require('dotenv').config();
@@ -198,7 +230,7 @@ client.on('interactionCreate', async (interaction) => {
     console.log(`Processing /echo for user ${interaction.user.id}`);
     const targetChannel = interaction.options.getChannel('channel');
     const echoMessage = interaction.options.getString('message');
-    if (!targetChannel.isTextBased airy()) {
+    if (!targetChannel.isTextBased()) {
       return interaction.reply('❌ The specified channel must be a text channel.');
     }
     try {

@@ -132,7 +132,7 @@ app.post('/notify', async (req, res) => {
       const channel = client.channels.cache.get(GOOGLE_DRIVE_CHANNEL_ID);
       if (channel && channel.isTextBased()) {
         await channel.send(
-          `📢 **New Update for WIP has arrived - Check it out!**\n` +
+          `📢 **New Update https://discord.com/channels/1361838672265089225/1362198914207449368 / or Google Drive link below - Check it out!**\n` +
           `**File:** ${file.data.name}\n` +
           `**Link:** ${GOOGLE_DRIVE_FOLDER_URL}`
         );

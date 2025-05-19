@@ -32,7 +32,7 @@ async function watchFolder(folderId) {
     return res.data;
   } catch (error) {
     console.error('Error setting up watch:', error);
-    throw error; // Rethrow to ensure caller handles failure
+    throw error;
   }
 }
 

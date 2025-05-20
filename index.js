@@ -92,7 +92,7 @@ const extremeTriggers = [
 ];
 
 // --- Translation Setup ---
-const LANGUAGE_FILE = 'D:/Bots/cringe-bot/languagePreferences.json';
+const LANGUAGE_FILE = process.env.LANGUAGE_FILE || '/opt/render/project/src/languagePreferences.json';
 const SUPPORTED_LANGUAGES = {
   'en': 'English',
   'es': 'Spanish',
@@ -134,17 +134,35 @@ try {
     }
   } else {
     console.log('languagePreferences.json does not exist. Creating new file.');
+    // Ensure the directory exists before writing the file
+    const dir = path.dirname(LANGUAGE_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`Created directory: ${dir}`);
+    }
     fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}, null, 2));
   }
 } catch (error) {
   console.error('Error loading languagePreferences.json:', error.message);
   languagePreferences = {};
+  // Ensure the directory exists before writing the file
+  const dir = path.dirname(LANGUAGE_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created directory: ${dir}`);
+  }
   fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}, null, 2));
 }
 
 // Save language preferences
 function saveLanguagePreferences() {
   try {
+    // Ensure the directory exists before writing the file
+    const dir = path.dirname(LANGUAGE_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`Created directory: ${dir}`);
+    }
     fs.writeFileSync(LANGUAGE_FILE, JSON.stringify(languagePreferences, null, 2));
     console.log('Saved language preferences:', languagePreferences);
   } catch (error) {

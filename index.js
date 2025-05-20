@@ -92,7 +92,7 @@ const extremeTriggers = [
 ];
 
 // --- Translation Setup ---
-const LANGUAGE_FILE = '/opt/render/project/src/data/languagePreferences.json';
+const LANGUAGE_FILE = 'D:/Bots/cringe-bot/languagePreferences.json';
 const SUPPORTED_LANGUAGES = {
   'en': 'English',
   'es': 'Spanish',

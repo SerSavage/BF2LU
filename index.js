@@ -84,7 +84,21 @@ const SUPPORTED_LANGUAGES = {
   'ru': 'Russian',
   'pt': 'Portuguese',
   'it': 'Italian',
-  'ko': 'Korean'
+  'ko': 'Korean',
+  'sv': 'Swedish',
+  'da': 'Danish',
+  'cs': 'Czech',
+  'fi': 'Finnish',
+  'el': 'Greek',
+  'hi': 'Hindi',
+  'ar': 'Arabic',
+  'no': 'Norwegian',
+  'pl': 'Polish',
+  'sr': 'Serbian',
+  'tr': 'Turkish',
+  'sk': 'Slovak',
+  'sl': 'Slovenian',
+  'pt-BR': 'Portuguese (Brazil)'
 };
 
 // Load or initialize language preferences
@@ -238,7 +252,21 @@ client.on('ready', async () => {
           { name: 'Russian', value: 'ru' },
           { name: 'Portuguese', value: 'pt' },
           { name: 'Italian', value: 'it' },
-          { name: 'Korean', value: 'ko' }
+          { name: 'Korean', value: 'ko' },
+          { name: 'Swedish', value: 'sv' },
+          { name: 'Danish', value: 'da' },
+          { name: 'Czech', value: 'cs' },
+          { name: 'Finnish', value: 'fi' },
+          { name: 'Greek', value: 'el' },
+          { name: 'Hindi', value: 'hi' },
+          { name: 'Arabic', value: 'ar' },
+          { name: 'Norwegian', value: 'no' },
+          { name: 'Polish', value: 'pl' },
+          { name: 'Serbian', value: 'sr' },
+          { name: 'Turkish', value: 'tr' },
+          { name: 'Slovak', value: 'sk' },
+          { name: 'Slovenian', value: 'sl' },
+          { name: 'Portuguese (Brazil)', value: 'pt-BR' }
         )
     );
 
@@ -259,7 +287,21 @@ client.on('ready', async () => {
           { name: 'Russian', value: 'ru' },
           { name: 'Portuguese', value: 'pt' },
           { name: 'Italian', value: 'it' },
-          { name: 'Korean', value: 'ko' }
+          { name: 'Korean', value: 'ko' },
+          { name: 'Swedish', value: 'sv' },
+          { name: 'Danish', value: 'da' },
+          { name: 'Czech', value: 'cs' },
+          { name: 'Finnish', value: 'fi' },
+          { name: 'Greek', value: 'el' },
+          { name: 'Hindi', value: 'hi' },
+          { name: 'Arabic', value: 'ar' },
+          { name: 'Norwegian', value: 'no' },
+          { name: 'Polish', value: 'pl' },
+          { name: 'Serbian', value: 'sr' },
+          { name: 'Turkish', value: 'tr' },
+          { name: 'Slovak', value: 'sk' },
+          { name: 'Slovenian', value: 'sl' },
+          { name: 'Portuguese (Brazil)', value: 'pt-BR' }
         )
     );
 

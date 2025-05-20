@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder, ApplicationCommandType, InteractionResponseFlags } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder, ApplicationCommandType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -15,8 +15,27 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildIntegrations
+    GatewayIntentBits.GuildIntegrations,
+    GatewayIntentBits.GuildMembers
   ]
+});
+
+// Add connection status logging
+client.on('ready', () => {
+  console.log(`Bot logged in as ${client.user.tag}`);
+  console.log('Guilds the bot is in:', client.guilds.cache.map(guild => `${guild.name} (${guild.id})`));
+});
+
+client.on('error', (error) => {
+  console.error('Client error:', error);
+});
+
+client.on('disconnect', () => {
+  console.log('Bot disconnected from Discord');
+});
+
+client.on('reconnecting', () => {
+  console.log('Bot reconnecting to Discord');
 });
 
 // Target channel IDs for moderation
@@ -73,7 +92,7 @@ const extremeTriggers = [
 ];
 
 // --- Translation Setup ---
-const LANGUAGE_FILE = './languagePreferences.json';
+const LANGUAGE_FILE = '/opt/render/project/src/data/languagePreferences.json';
 const SUPPORTED_LANGUAGES = {
   'en': 'English',
   'es': 'Spanish',
@@ -370,6 +389,7 @@ client.on('ready', async () => {
 
 // Handle interactions (slash commands and context menu)
 client.on('interactionCreate', async interaction => {
+  console.log('Interaction received:', interaction.commandName);
   if (!interaction.isCommand() && !interaction.isMessageContextMenuCommand()) return;
 
   const { commandName, options, targetMessage } = interaction;
@@ -380,13 +400,13 @@ client.on('interactionCreate', async interaction => {
     try {
       if (channel.isTextBased()) {
         await channel.send(message);
-        await interaction.reply({ content: `Message sent to ${channel}!`, flags: InteractionResponseFlags.Ephemeral });
+        await interaction.reply({ content: `Message sent to ${channel}!`, ephemeral: true });
       } else {
-        await interaction.reply({ content: 'Please select a text channel.', flags: InteractionResponseFlags.Ephemeral });
+        await interaction.reply({ content: 'Please select a text channel.', ephemeral: true });
       }
     } catch (error) {
       console.error('Error handling /echo:', error);
-      await interaction.reply({ content: 'Failed to send message.', flags: InteractionResponseFlags.Ephemeral }).catch(console.error);
+      await interaction.reply({ content: 'Failed to send message.', ephemeral: true }).catch(console.error);
     }
   } else if (commandName === 'translate') {
     const text = options.getString('text');
@@ -395,12 +415,13 @@ client.on('interactionCreate', async interaction => {
       const translatedText = await translateText(text, targetLang);
       await interaction.reply(`**Original:** ${text}\n**Translated (${SUPPORTED_LANGUAGES[targetLang]}):** ${translatedText}`);
     } catch (error) {
-      await interaction.reply({ content: 'Failed to translate text.', flags: InteractionResponseFlags.Ephemeral }).catch(console.error);
+      await interaction.reply({ content: 'Failed to translate text.', ephemeral: true }).catch(console.error);
     }
   } else if (commandName === 'setlanguage') {
-    await interaction.deferReply({ flags: InteractionResponseFlags.Ephemeral });
+    await interaction.deferReply({ ephemeral: true });
     const language = options.getString('language');
     languagePreferences[interaction.user.id] = language;
+    console.log('Setting language for:', interaction.user.id);
     saveLanguagePreferences();
     try {
       await interaction.editReply(`Preferred language set to ${SUPPORTED_LANGUAGES[language]}.`);
@@ -410,7 +431,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({ content: 'Failed to set language. Please try again.' }).catch(console.error);
     }
   } else if (commandName === 'Translate with CringeBot') {
-    await interaction.deferReply({ flags: InteractionResponseFlags.Ephemeral });
+    await interaction.deferReply({ ephemeral: true });
     const messageContent = targetMessage.content;
     const userLang = languagePreferences[interaction.user.id] || 'en';
     console.log(`Translate with CringeBot triggered by ${interaction.user.id}, userLang: ${userLang}, message: ${messageContent}`);
@@ -506,6 +527,15 @@ client.on('messageCreate', async (message) => {
       console.error('Auto-translation error:', error);
     }
   }
+});
+
+// Global error handler to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 client.login(process.env.DISCORD_TOKEN);

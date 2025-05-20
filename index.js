@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder, ApplicationCommandType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -263,6 +263,12 @@ client.on('ready', async () => {
         )
     );
 
+  // Context menu command
+  const translateContextCommand = {
+    name: 'Translate with CringeBot',
+    type: ApplicationCommandType.Message,
+  };
+
   try {
     await guild.commands.set([]);
     console.log(`Cleared existing guild commands in guild ${guild.id}`);
@@ -271,9 +277,10 @@ client.on('ready', async () => {
     await guild.commands.create(echoCommand);
     await guild.commands.create(translateCommand);
     await guild.commands.create(setLanguageCommand);
-    console.log(`Registered /echo, /translate, and /setlanguage slash commands in guild ${guild.id}`);
+    await guild.commands.create(translateContextCommand);
+    console.log(`Registered /echo, /translate, /setlanguage, and Translate with CringeBot context menu in guild ${guild.id}`);
   } catch (error) {
-    console.error('Failed to register slash commands:', error);
+    console.error('Failed to register commands:', error);
   }
 
   // Start bump reminder every 2 hours
@@ -300,11 +307,11 @@ client.on('ready', async () => {
   }
 });
 
-// Handle slash command interactions
+// Handle interactions (slash commands and context menu)
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
+  if (!interaction.isCommand() && !interaction.isMessageContextMenuCommand()) return;
 
-  const { commandName, options } = interaction;
+  const { commandName, options, targetMessage } = interaction;
 
   if (commandName === 'echo') {
     const channel = options.getChannel('channel');
@@ -334,6 +341,21 @@ client.on('interactionCreate', async interaction => {
     languagePreferences[interaction.user.id] = language;
     saveLanguagePreferences();
     await interaction.reply(`Preferred language set to ${SUPPORTED_LANGUAGES[language]}.`);
+  } else if (commandName === 'Translate with CringeBot') {
+    const messageContent = targetMessage.content;
+    const userLang = languagePreferences[interaction.user.id] || 'en';
+
+    if (!userLang || userLang === 'en') {
+      await interaction.reply({ content: 'Please set a preferred language with /setlanguage (e.g., /setlanguage language:es) to translate this message.', ephemeral: true });
+      return;
+    }
+
+    try {
+      const translatedText = await translateText(messageContent, userLang);
+      await interaction.reply(`**Original:** ${messageContent}\n**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
+    } catch (error) {
+      await interaction.reply({ content: 'Failed to translate the message.', ephemeral: true });
+    }
   }
 });
 
@@ -387,7 +409,7 @@ client.on('messageCreate', async (message) => {
         });
         try {
           const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
-          if (modChannel && modChannel.isTextBased()) {
+          if (modChannel && channel.isTextBased()) {
             await modChannel.send({
               content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n` +
                        `**User:** <@${message.author.id}>\n` +

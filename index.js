@@ -19,7 +19,7 @@ const client = new Client({
   ]
 });
 
-// Target channel IDs where the bot will watch for trigger messages
+// Target channel IDs for moderation
 const targetChannels = [
   '1361838672818995312',
   '1366888045164499097',
@@ -29,19 +29,13 @@ const targetChannels = [
   '1364277004198875278'
 ];
 
-// Channel where moderation alerts should be sent
+// Moderation and bump channel IDs
 const MOD_CHANNEL_ID = '1362988156546449598';
-
-// Bump channel ID
 const BUMP_CHANNEL_ID = '1361848627789828148';
-
-// Google Drive notification channel ID
 const GOOGLE_DRIVE_CHANNEL_ID = process.env.GOOGLE_DRIVE_CHANNEL_ID;
-
-// Google Drive folder URL for notifications
 const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/u/2/folders/139urJMaf1NgqQb6CgrnPrqEDZT0DoE0b';
 
-// Keywords to trigger the bot
+// Moderation triggers
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
   'not funny', 'who asked', 'kill me now', 'this ain\'t it', 'try harder',
@@ -53,7 +47,6 @@ const triggers = [
   'harmful joke', 'ableist joke', 'homophobic joke', 'misogynistic joke', 'distasteful joke'
 ];
 
-// Extreme content triggers
 const extremeTriggers = [
   'nigger', 'chink', 'gook', 'spic', 'kike', 'sand nigger', 'porch monkey',
   'slant eye', 'wetback', 'beaner', 'camel jockey', 'raghead', 'towelhead',
@@ -79,7 +72,7 @@ const extremeTriggers = [
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
 
-// --- Language Preferences ---
+// --- Translation Setup ---
 const LANGUAGE_FILE = './languagePreferences.json';
 const SUPPORTED_LANGUAGES = {
   'en': 'English',
@@ -117,7 +110,7 @@ async function translateText(text, targetLang, sourceLang = 'auto') {
     });
     return response.data.translatedText;
   } catch (error) {
-    console.error('Translation error:', error);
+    console.error('Translation error:', error.response?.data || error.message);
     throw new Error('Failed to translate text');
   }
 }
@@ -181,7 +174,7 @@ app.post('/notify', async (req, res) => {
         await channel.send(
           `📢 **New Update for WIP has arrived - Check it out!**\n` +
           `**File:** ${file.data.name}\n` +
-          `**Link:** ${file.data.webViewLink}` // Use file link instead of folder
+          `**Link:** ${file.data.webViewLink}`
         );
       }
     }
@@ -283,20 +276,20 @@ client.on('ready', async () => {
     console.error('Failed to register slash commands:', error);
   }
 
-  // Start the bump automation
+  // Start bump reminder every 2 hours
   setInterval(async () => {
     try {
       const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
       if (channel && channel.isTextBased()) {
-        await channel.send('/bump');
-        console.log(`Sent /bump to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
+        await channel.send('Hey, it’s time to bump the server! Use /bump to keep us visible! 📣');
+        console.log(`Sent bump reminder to channel ${BUMP_CHANNEL_ID} at ${new Date().toLocaleString()}`);
       } else {
         console.error(`Channel ${BUMP_CHANNEL_ID} not found or not text-based`);
       }
     } catch (err) {
-      console.error('Failed to send /bump:', err);
+      console.error('Failed to send bump reminder:', err);
     }
-  }, 3 * 60 * 60 * 1000);
+  }, 2 * 60 * 60 * 1000);
 
   // Start watching Google Drive folder
   try {
@@ -344,13 +337,13 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Auto-translate messages based on user preferences
+// Auto-translate messages and handle moderation
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
 
-  // Existing moderation logic
+  // Moderation logic
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;

@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder, ApplicationCommandType } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, SlashCommandBuilder, ApplicationCommandType, InteractionResponseFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -103,15 +103,34 @@ const SUPPORTED_LANGUAGES = {
 
 // Load or initialize language preferences
 let languagePreferences = {};
-if (fs.existsSync(LANGUAGE_FILE)) {
-  languagePreferences = JSON.parse(fs.readFileSync(LANGUAGE_FILE));
-} else {
-  fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}));
+try {
+  if (fs.existsSync(LANGUAGE_FILE)) {
+    const fileContent = fs.readFileSync(LANGUAGE_FILE, 'utf8');
+    if (fileContent.trim() !== '') {
+      languagePreferences = JSON.parse(fileContent);
+      console.log('Loaded language preferences:', languagePreferences);
+    } else {
+      console.warn('languagePreferences.json is empty. Initializing with empty object.');
+      languagePreferences = {};
+    }
+  } else {
+    console.log('languagePreferences.json does not exist. Creating new file.');
+    fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}, null, 2));
+  }
+} catch (error) {
+  console.error('Error loading languagePreferences.json:', error.message);
+  languagePreferences = {};
+  fs.writeFileSync(LANGUAGE_FILE, JSON.stringify({}, null, 2));
 }
 
 // Save language preferences
 function saveLanguagePreferences() {
-  fs.writeFileSync(LANGUAGE_FILE, JSON.stringify(languagePreferences, null, 2));
+  try {
+    fs.writeFileSync(LANGUAGE_FILE, JSON.stringify(languagePreferences, null, 2));
+    console.log('Saved language preferences:', languagePreferences);
+  } catch (error) {
+    console.error('Error saving languagePreferences.json:', error.message);
+  }
 }
 
 // Translate text using LibreTranslate
@@ -361,13 +380,13 @@ client.on('interactionCreate', async interaction => {
     try {
       if (channel.isTextBased()) {
         await channel.send(message);
-        await interaction.reply({ content: `Message sent to ${channel}!`, ephemeral: true });
+        await interaction.reply({ content: `Message sent to ${channel}!`, flags: InteractionResponseFlags.Ephemeral });
       } else {
-        await interaction.reply({ content: 'Please select a text channel.', ephemeral: true });
+        await interaction.reply({ content: 'Please select a text channel.', flags: InteractionResponseFlags.Ephemeral });
       }
     } catch (error) {
       console.error('Error handling /echo:', error);
-      await interaction.reply({ content: 'Failed to send message.', ephemeral: true });
+      await interaction.reply({ content: 'Failed to send message.', flags: InteractionResponseFlags.Ephemeral });
     }
   } else if (commandName === 'translate') {
     const text = options.getString('text');
@@ -376,27 +395,31 @@ client.on('interactionCreate', async interaction => {
       const translatedText = await translateText(text, targetLang);
       await interaction.reply(`**Original:** ${text}\n**Translated (${SUPPORTED_LANGUAGES[targetLang]}):** ${translatedText}`);
     } catch (error) {
-      await interaction.reply({ content: 'Failed to translate text.', ephemeral: true });
+      await interaction.reply({ content: 'Failed to translate text.', flags: InteractionResponseFlags.Ephemeral });
     }
   } else if (commandName === 'setlanguage') {
     const language = options.getString('language');
     languagePreferences[interaction.user.id] = language;
     saveLanguagePreferences();
     await interaction.reply(`Preferred language set to ${SUPPORTED_LANGUAGES[language]}.`);
+    console.log(`Set language for user ${interaction.user.id} to ${language}`);
   } else if (commandName === 'Translate with CringeBot') {
+    await interaction.deferReply({ flags: InteractionResponseFlags.Ephemeral });
     const messageContent = targetMessage.content;
     const userLang = languagePreferences[interaction.user.id] || 'en';
+    console.log(`Translate with CringeBot triggered by ${interaction.user.id}, userLang: ${userLang}, message: ${messageContent}`);
 
     if (!userLang || userLang === 'en') {
-      await interaction.reply({ content: 'Please set a preferred language with /setlanguage (e.g., /setlanguage language:es) to translate this message.', ephemeral: true });
+      await interaction.editReply({ content: 'Please set a preferred language with /setlanguage (e.g., /setlanguage language:es) to translate this message.' });
       return;
     }
 
     try {
       const translatedText = await translateText(messageContent, userLang);
-      await interaction.reply(`**Original:** ${messageContent}\n**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
+      await interaction.editReply(`**Original:** ${messageContent}\n**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
     } catch (error) {
-      await interaction.reply({ content: 'Failed to translate the message.', ephemeral: true });
+      console.error('Error in Translate with CringeBot:', error);
+      await interaction.editReply({ content: 'Failed to translate the message.' });
     }
   }
 });
@@ -451,7 +474,7 @@ client.on('messageCreate', async (message) => {
         });
         try {
           const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
-          if (modChannel && channel.isTextBased()) {
+          if (modChannel && modChannel.isTextBased()) {
             await modChannel.send({
               content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n` +
                        `**User:** <@${message.author.id}>\n` +

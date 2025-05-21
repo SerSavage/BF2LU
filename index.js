@@ -93,7 +93,34 @@ const extremeTriggers = [
 
 // --- Translation Setup ---
 const LANGUAGE_FILE = process.env.LANGUAGE_FILE || '/opt/render/project/src/languagePreferences.json';
-const LIBRETRANSLATE_URL = 'http://localhost:5000/translate'; // Updated to local Docker instance
+const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'http://localhost:5000/translate'; // Use environment variable for flexibility
+
+const SUPPORTED_LANGUAGES = {
+  'en': 'English',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'ja': 'Japanese',
+  'zh': 'Chinese',
+  'ru': 'Russian',
+  'pt': 'Portuguese',
+  'it': 'Italian',
+  'ko': 'Korean',
+  'sv': 'Swedish',
+  'da': 'Danish',
+  'cs': 'Czech',
+  'fi': 'Finnish',
+  'el': 'Greek',
+  'hi': 'Hindi',
+  'ar': 'Arabic',
+  'no': 'Norwegian',
+  'pl': 'Polish',
+  'sr': 'Serbian',
+  'tr': 'Turkish',
+  'sk': 'Slovak',
+  'sl': 'Slovenian',
+  'pt-BR': 'Portuguese (Brazil)'
+};
 
 // Load or initialize language preferences
 let languagePreferences = {};
@@ -142,14 +169,14 @@ function saveLanguagePreferences() {
   }
 }
 
-// --- NEW: Fetch available languages from Docker instance ---
+// Fetch available languages from LibreTranslate
 async function getAvailableLanguages() {
   try {
-    const response = await axios.get('http://localhost:5000/languages');
+    const response = await axios.get(LIBRETRANSLATE_URL.replace('/translate', '/languages'));
     return response.data.map(lang => lang.code);
   } catch (error) {
     console.error('Error fetching languages:', error.message);
-    return ['en']; // Fallback to English
+    return Object.keys(SUPPORTED_LANGUAGES); // Fallback to SUPPORTED_LANGUAGES keys
   }
 }
 
@@ -160,10 +187,9 @@ let availableLanguages = [];
   console.log('Available languages:', availableLanguages);
 })();
 
-// --- Updated translateText function ---
+// Translate text using LibreTranslate
 async function translateText(text, targetLang, sourceLang = 'auto') {
   try {
-    // Validate target language
     if (!availableLanguages.includes(targetLang)) {
       throw new Error(`Target language '${targetLang}' is not supported. Available: ${availableLanguages.join(', ')}`);
     }
@@ -293,7 +319,6 @@ client.on('ready', async () => {
         .setDescription('Target language code')
         .setRequired(true)
         .addChoices(
-          // Dynamically generate choices based on available languages
           ...availableLanguages.map(lang => ({ name: SUPPORTED_LANGUAGES[lang] || lang, value: lang }))
         )
     );
@@ -306,7 +331,6 @@ client.on('ready', async () => {
         .setDescription('Preferred language code')
         .setRequired(true)
         .addChoices(
-          // Dynamically generate choices based on available languages
           ...availableLanguages.map(lang => ({ name: SUPPORTED_LANGUAGES[lang] || lang, value: lang }))
         )
     );
@@ -485,12 +509,12 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // --- Updated Auto-Translation Logic ---
+  // Auto-translation logic
   const targetLang = languagePreferences[message.author.id] || languagePreferences[`channel_${message.channel.id}`] || 'en';
   if (!message.content || message.content.startsWith('!')) return;
 
   try {
-    const detectResponse = await axios.post('http://localhost:5000/detect', { q: message.content });
+    const detectResponse = await axios.post(LIBRETRANSLATE_URL.replace('/translate', '/detect'), { q: message.content });
     const sourceLang = detectResponse.data[0]?.language || 'auto';
     if (sourceLang === targetLang) return;
 

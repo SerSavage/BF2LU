@@ -93,32 +93,7 @@ const extremeTriggers = [
 
 // --- Translation Setup ---
 const LANGUAGE_FILE = process.env.LANGUAGE_FILE || '/opt/render/project/src/languagePreferences.json';
-const SUPPORTED_LANGUAGES = {
-  'en': 'English',
-  'es': 'Spanish',
-  'fr': 'French',
-  'de': 'German',
-  'ja': 'Japanese',
-  'zh': 'Chinese',
-  'ru': 'Russian',
-  'pt': 'Portuguese',
-  'it': 'Italian',
-  'ko': 'Korean',
-  'sv': 'Swedish',
-  'da': 'Danish',
-  'cs': 'Czech',
-  'fi': 'Finnish',
-  'el': 'Greek',
-  'hi': 'Hindi',
-  'ar': 'Arabic',
-  'no': 'Norwegian',
-  'pl': 'Polish',
-  'sr': 'Serbian',
-  'tr': 'Turkish',
-  'sk': 'Slovak',
-  'sl': 'Slovenian',
-  'pt-BR': 'Portuguese (Brazil)'
-};
+const LIBRETRANSLATE_URL = 'http://localhost:5000/translate'; // Updated to local Docker instance
 
 // Load or initialize language preferences
 let languagePreferences = {};
@@ -134,7 +109,6 @@ try {
     }
   } else {
     console.log('languagePreferences.json does not exist. Creating new file.');
-    // Ensure the directory exists before writing the file
     const dir = path.dirname(LANGUAGE_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -145,7 +119,6 @@ try {
 } catch (error) {
   console.error('Error loading languagePreferences.json:', error.message);
   languagePreferences = {};
-  // Ensure the directory exists before writing the file
   const dir = path.dirname(LANGUAGE_FILE);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -157,7 +130,6 @@ try {
 // Save language preferences
 function saveLanguagePreferences() {
   try {
-    // Ensure the directory exists before writing the file
     const dir = path.dirname(LANGUAGE_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -170,10 +142,32 @@ function saveLanguagePreferences() {
   }
 }
 
-// Translate text using LibreTranslate
+// --- NEW: Fetch available languages from Docker instance ---
+async function getAvailableLanguages() {
+  try {
+    const response = await axios.get('http://localhost:5000/languages');
+    return response.data.map(lang => lang.code);
+  } catch (error) {
+    console.error('Error fetching languages:', error.message);
+    return ['en']; // Fallback to English
+  }
+}
+
+let availableLanguages = [];
+
+(async () => {
+  availableLanguages = await getAvailableLanguages();
+  console.log('Available languages:', availableLanguages);
+})();
+
+// --- Updated translateText function ---
 async function translateText(text, targetLang, sourceLang = 'auto') {
   try {
-    const response = await axios.post('https://translate.argosopentech.com/translate', {
+    // Validate target language
+    if (!availableLanguages.includes(targetLang)) {
+      throw new Error(`Target language '${targetLang}' is not supported. Available: ${availableLanguages.join(', ')}`);
+    }
+    const response = await axios.post(LIBRETRANSLATE_URL, {
       q: text,
       source: sourceLang,
       target: targetLang
@@ -296,33 +290,11 @@ client.on('ready', async () => {
     )
     .addStringOption(option =>
       option.setName('language')
-        .setDescription('Target language code (e.g., es for Spanish)')
+        .setDescription('Target language code')
         .setRequired(true)
         .addChoices(
-          { name: 'English', value: 'en' },
-          { name: 'Spanish', value: 'es' },
-          { name: 'French', value: 'fr' },
-          { name: 'German', value: 'de' },
-          { name: 'Japanese', value: 'ja' },
-          { name: 'Chinese', value: 'zh' },
-          { name: 'Russian', value: 'ru' },
-          { name: 'Portuguese', value: 'pt' },
-          { name: 'Italian', value: 'it' },
-          { name: 'Korean', value: 'ko' },
-          { name: 'Swedish', value: 'sv' },
-          { name: 'Danish', value: 'da' },
-          { name: 'Czech', value: 'cs' },
-          { name: 'Finnish', value: 'fi' },
-          { name: 'Greek', value: 'el' },
-          { name: 'Hindi', value: 'hi' },
-          { name: 'Arabic', value: 'ar' },
-          { name: 'Norwegian', value: 'no' },
-          { name: 'Polish', value: 'pl' },
-          { name: 'Serbian', value: 'sr' },
-          { name: 'Turkish', value: 'tr' },
-          { name: 'Slovak', value: 'sk' },
-          { name: 'Slovenian', value: 'sl' },
-          { name: 'Portuguese (Brazil)', value: 'pt-BR' }
+          // Dynamically generate choices based on available languages
+          ...availableLanguages.map(lang => ({ name: SUPPORTED_LANGUAGES[lang] || lang, value: lang }))
         )
     );
 
@@ -331,33 +303,11 @@ client.on('ready', async () => {
     .setDescription('Set your preferred language')
     .addStringOption(option =>
       option.setName('language')
-        .setDescription('Preferred language code (e.g., es for Spanish)')
+        .setDescription('Preferred language code')
         .setRequired(true)
         .addChoices(
-          { name: 'English', value: 'en' },
-          { name: 'Spanish', value: 'es' },
-          { name: 'French', value: 'fr' },
-          { name: 'German', value: 'de' },
-          { name: 'Japanese', value: 'ja' },
-          { name: 'Chinese', value: 'zh' },
-          { name: 'Russian', value: 'ru' },
-          { name: 'Portuguese', value: 'pt' },
-          { name: 'Italian', value: 'it' },
-          { name: 'Korean', value: 'ko' },
-          { name: 'Swedish', value: 'sv' },
-          { name: 'Danish', value: 'da' },
-          { name: 'Czech', value: 'cs' },
-          { name: 'Finnish', value: 'fi' },
-          { name: 'Greek', value: 'el' },
-          { name: 'Hindi', value: 'hi' },
-          { name: 'Arabic', value: 'ar' },
-          { name: 'Norwegian', value: 'no' },
-          { name: 'Polish', value: 'pl' },
-          { name: 'Serbian', value: 'sr' },
-          { name: 'Turkish', value: 'tr' },
-          { name: 'Slovak', value: 'sk' },
-          { name: 'Slovenian', value: 'sl' },
-          { name: 'Portuguese (Brazil)', value: 'pt-BR' }
+          // Dynamically generate choices based on available languages
+          ...availableLanguages.map(lang => ({ name: SUPPORTED_LANGUAGES[lang] || lang, value: lang }))
         )
     );
 
@@ -431,9 +381,9 @@ client.on('interactionCreate', async interaction => {
     const targetLang = options.getString('language');
     try {
       const translatedText = await translateText(text, targetLang);
-      await interaction.reply(`**Original:** ${text}\n**Translated (${SUPPORTED_LANGUAGES[targetLang]}):** ${translatedText}`);
+      await interaction.reply(`**Original:** ${text}\n**Translated (${SUPPORTED_LANGUAGES[targetLang] || targetLang}):** ${translatedText}`);
     } catch (error) {
-      await interaction.reply({ content: 'Failed to translate text.', ephemeral: true }).catch(console.error);
+      await interaction.reply({ content: error.message, ephemeral: true }).catch(console.error);
     }
   } else if (commandName === 'setlanguage') {
     await interaction.deferReply({ ephemeral: true });
@@ -442,7 +392,7 @@ client.on('interactionCreate', async interaction => {
     console.log('Setting language for:', interaction.user.id);
     saveLanguagePreferences();
     try {
-      await interaction.editReply(`Preferred language set to ${SUPPORTED_LANGUAGES[language]}.`);
+      await interaction.editReply(`Preferred language set to ${SUPPORTED_LANGUAGES[language] || language}.`);
       console.log(`Set language for user ${interaction.user.id} to ${language}`);
     } catch (error) {
       console.error('Error setting language:', error);
@@ -461,10 +411,10 @@ client.on('interactionCreate', async interaction => {
 
     try {
       const translatedText = await translateText(messageContent, userLang);
-      await interaction.editReply(`**Original:** ${messageContent}\n**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
+      await interaction.editReply(`**Original:** ${messageContent}\n**Translated (${SUPPORTED_LANGUAGES[userLang] || userLang}):** ${translatedText}`);
     } catch (error) {
       console.error('Error in Translate with CringeBot:', error);
-      await interaction.editReply({ content: 'Failed to translate the message.' }).catch(console.error);
+      await interaction.editReply({ content: error.message }).catch(console.error);
     }
   }
 });
@@ -519,7 +469,7 @@ client.on('messageCreate', async (message) => {
         });
         try {
           const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
-          if (modChannel && channel.isTextBased()) {
+          if (modChannel && modChannel.isTextBased()) {
             await modChannel.send({
               content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n` +
                        `**User:** <@${message.author.id}>\n` +
@@ -535,15 +485,30 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Auto-translate for users with preferences
-  const userLang = languagePreferences[message.author.id];
-  if (userLang && userLang !== 'en') {
-    try {
-      const translatedText = await translateText(message.content, userLang);
-      await message.reply(`**Translated (${SUPPORTED_LANGUAGES[userLang]}):** ${translatedText}`);
-    } catch (error) {
-      console.error('Auto-translation error:', error);
+  // --- Updated Auto-Translation Logic ---
+  const targetLang = languagePreferences[message.author.id] || languagePreferences[`channel_${message.channel.id}`] || 'en';
+  if (!message.content || message.content.startsWith('!')) return;
+
+  try {
+    const detectResponse = await axios.post('http://localhost:5000/detect', { q: message.content });
+    const sourceLang = detectResponse.data[0]?.language || 'auto';
+    if (sourceLang === targetLang) return;
+
+    if (!availableLanguages.includes(targetLang)) {
+      await message.reply(`Target language '${targetLang}' is not supported. Available: ${availableLanguages.join(', ')}`);
+      return;
     }
+
+    const response = await axios.post(LIBRETRANSLATE_URL, {
+      q: message.content,
+      source: sourceLang,
+      target: targetLang,
+    });
+
+    await message.reply(`Translated (${sourceLang} -> ${SUPPORTED_LANGUAGES[targetLang] || targetLang}): ${response.data.translatedText}`);
+  } catch (error) {
+    console.error('Translation error:', error.message);
+    await message.reply('Error translating your message.');
   }
 });
 

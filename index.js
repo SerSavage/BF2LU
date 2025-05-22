@@ -52,7 +52,14 @@ const targetChannels = [
 const MOD_CHANNEL_ID = '1362988156546449598';
 const BUMP_CHANNEL_ID = '1361848627789828148';
 const GOOGLE_DRIVE_CHANNEL_ID = process.env.GOOGLE_DRIVE_CHANNEL_ID;
+const MOD_UPDATE_CHANNEL_ID = process.env.GOOGLE_DRIVE_CHANNEL_ID; // Use same channel for mod updates
 const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/u/2/folders/139urJMaf1NgqQb6CgrnPrqEDZT0DoE0b';
+
+// Nexus Mods API configuration
+const NEXUS_API_KEY = process.env.NEXUS_API_KEY;
+const GAME_DOMAIN = 'starwarsbattlefront22017';
+const MOD_ID = '11814';
+const CHECK_INTERVAL = 30 * 1000; // 30 seconds in milliseconds
 
 // Moderation triggers
 const triggers = [
@@ -93,7 +100,7 @@ const extremeTriggers = [
 
 // --- Translation Setup ---
 const LANGUAGE_FILE = process.env.LANGUAGE_FILE || '/opt/render/project/src/languagePreferences.json';
-const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'http://localhost:5000/translate'; // Use environment variable for flexibility
+const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'http://localhost:5000/translate';
 
 const SUPPORTED_LANGUAGES = {
   'en': 'English',
@@ -176,7 +183,7 @@ async function getAvailableLanguages() {
     return response.data.map(lang => lang.code);
   } catch (error) {
     console.error('Error fetching languages:', error.message);
-    return Object.keys(SUPPORTED_LANGUAGES); // Fallback to SUPPORTED_LANGUAGES keys
+    return Object.keys(SUPPORTED_LANGUAGES);
   }
 }
 
@@ -275,6 +282,58 @@ app.post('/notify', async (req, res) => {
   }
 });
 
+// --- Nexus Mods API Setup ---
+let lastVersion = null;
+
+const nexusApi = axios.create({
+  baseURL: 'https://api.nexusmods.com/v1',
+  headers: { apikey: NEXUS_API_KEY }
+});
+
+async function checkModUpdates() {
+  try {
+    const response = await nexusApi.get(`/games/${GAME_DOMAIN}/mods/${MOD_ID}/files.json`);
+    const files = response.data.files;
+    
+    if (!files || files.length === 0) {
+      console.log('No files found for mod.');
+      return;
+    }
+
+    const latestFile = files.reduce((latest, file) => {
+      return !latest || file.uploaded_timestamp > latest.uploaded_timestamp ? file : latest;
+    }, null);
+
+    const currentVersion = latestFile.version;
+    const uploadDate = new Date(latestFile.uploaded_timestamp * 1000).toISOString();
+    const fileName = latestFile.file_name;
+
+    if (lastVersion && lastVersion !== currentVersion) {
+      console.log(`New mod version detected: ${currentVersion} (File: ${fileName}, Uploaded: ${uploadDate})`);
+      const channel = await client.channels.fetch(MOD_UPDATE_CHANNEL_ID);
+      if (channel && channel.isTextBased()) {
+        await channel.send(
+          `📢 **New Mod Update Available!**\n` +
+          `**Mod ID:** ${MOD_ID}\n` +
+          `**Version:** ${currentVersion}\n` +
+          `**File:** ${fileName}\n` +
+          `**Uploaded:** ${uploadDate}\n` +
+          `**Link:** https://www.nexusmods.com/${GAME_DOMAIN}/mods/${MOD_ID}`
+        );
+        await channel.send(
+          `📡 Incoming transmission...   🔧 SYSTEM UPDATE...   🛠️ STATUS: Deployed and operational.  📍 Location: Central Repository of NEXUS ><Holocron Archives>>  📄End of transmission. May the source be with you.`
+        );
+      }
+    } else if (!lastVersion) {
+      console.log(`Initial mod version: ${currentVersion} (File: ${fileName})`);
+    }
+
+    lastVersion = currentVersion;
+  } catch (error) {
+    console.error('Error checking mod updates:', error.response?.data || error.message);
+  }
+}
+
 // Start Express server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
@@ -335,7 +394,6 @@ client.on('ready', async () => {
         )
     );
 
-  // Context menu command
   const translateContextCommand = {
     name: 'Translate with CringeBot',
     type: ApplicationCommandType.Message,
@@ -377,9 +435,14 @@ client.on('ready', async () => {
   } catch (error) {
     console.error('Failed to start watching Google Drive folder:', error);
   }
+
+  // Start Nexus Mods polling
+  checkModUpdates(); // Initial check
+  setInterval(checkModUpdates, CHECK_INTERVAL);
+  console.log(`Started polling Nexus Mods for mod ${MOD_ID} every ${CHECK_INTERVAL / 1000} seconds`);
 });
 
-// Handle interactions (slash commands and context menu)
+// Handle interactions
 client.on('interactionCreate', async interaction => {
   console.log('Interaction received:', interaction.commandName);
   if (!interaction.isCommand() && !interaction.isMessageContextMenuCommand()) return;
@@ -511,7 +574,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Global error handler to prevent crashes
+// Global error handler
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
 });

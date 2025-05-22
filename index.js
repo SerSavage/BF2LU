@@ -443,13 +443,13 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Auto-translate messages and handle moderation
+// Handle messages for moderation only
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
 
-  // Moderation logic
+  // Moderation logic for extreme triggers
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;
@@ -482,6 +482,7 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  // Moderation logic for regular triggers in target channels
   if (targetChannels.includes(message.channel.id)) {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
@@ -507,32 +508,6 @@ client.on('messageCreate', async (message) => {
         console.error("Audio file missing at:", filePath);
       }
     }
-  }
-
-  // Auto-translation logic
-  const targetLang = languagePreferences[message.author.id] || languagePreferences[`channel_${message.channel.id}`] || 'en';
-  if (!message.content || message.content.startsWith('!')) return;
-
-  try {
-    const detectResponse = await axios.post(LIBRETRANSLATE_URL.replace('/translate', '/detect'), { q: message.content });
-    const sourceLang = detectResponse.data[0]?.language || 'auto';
-    if (sourceLang === targetLang) return;
-
-    if (!availableLanguages.includes(targetLang)) {
-      await message.reply(`Target language '${targetLang}' is not supported. Available: ${availableLanguages.join(', ')}`);
-      return;
-    }
-
-    const response = await axios.post(LIBRETRANSLATE_URL, {
-      q: message.content,
-      source: sourceLang,
-      target: targetLang,
-    });
-
-    await message.reply(`Translated (${sourceLang} -> ${SUPPORTED_LANGUAGES[targetLang] || targetLang}): ${response.data.translatedText}`);
-  } catch (error) {
-    console.error('Translation error:', error.message);
-    await message.reply('Error translating your message.');
   }
 });
 

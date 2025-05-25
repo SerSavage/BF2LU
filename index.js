@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -23,6 +23,15 @@ const client = new Client({
 });
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
+const CLIENT_ID = process.env.CLIENT_ID;
+
+// List of supported languages from LibreTranslate
+const supportedLanguages = [
+  'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr', 
+  'ga', 'gl', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nb', 
+  'nl', 'pb', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sv', 'th', 'tl', 'tr', 
+  'uk', 'zh', 'zt'
+];
 
 const targetChannels = [
   '1361838672818995312',
@@ -34,14 +43,6 @@ const targetChannels = [
 ];
 
 const MOD_CHANNEL_ID = '1362988156546449598';
-
-// List of supported languages from LibreTranslate
-const supportedLanguages = [
-  'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr', 
-  'ga', 'gl', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nb', 
-  'nl', 'pb', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sv', 'th', 'tl', 'tr', 
-  'uk', 'zh', 'zt'
-];
 
 const triggers = [
   'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
@@ -79,8 +80,38 @@ const extremeTriggers = [
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
 
-client.once('ready', () => {
+// Register slash commands on startup
+const commands = require('./commands.json');
+const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
+
+async function registerCommands() {
+  if (fs.existsSync(commandsRegisteredFile)) {
+    console.log('Slash commands already registered, skipping...');
+    return;
+  }
+
+  if (!CLIENT_ID) {
+    console.error('CLIENT_ID environment variable is not set. Cannot register commands.');
+    return;
+  }
+
+  try {
+    console.log('Registering slash commands...');
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: commands }
+    );
+    console.log('Slash commands registered successfully.');
+    fs.writeFileSync(commandsRegisteredFile, 'registered', 'utf8');
+  } catch (error) {
+    console.error('Error registering commands:', error);
+  }
+}
+
+client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
+  await registerCommands();
 });
 
 client.on('messageCreate', async (message) => {

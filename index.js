@@ -4,7 +4,7 @@ const path = require('path');
 const axios = require('axios');
 require('dotenv').config();
 
-// Initialize users from users.json, or an empty object if file is missing
+// Initialize users from users.json
 let users = {};
 try {
   const usersData = fs.readFileSync(path.join(__dirname, 'users.json'), 'utf8');
@@ -12,6 +12,17 @@ try {
 } catch (err) {
   console.warn('users.json not found or invalid, starting with empty users object:', err.message);
   fs.writeFileSync(path.join(__dirname, 'users.json'), '{}', 'utf8');
+}
+
+// Initialize bump data
+let bumpData = {};
+const bumpDataFile = path.join(__dirname, 'bump.json');
+try {
+  const bumpDataRaw = fs.readFileSync(bumpDataFile, 'utf8');
+  bumpData = JSON.parse(bumpDataRaw);
+} catch (err) {
+  console.warn('bump.json not found or invalid, starting with empty bump data:', err.message);
+  fs.writeFileSync(bumpDataFile, '{}', 'utf8');
 }
 
 const client = new Client({
@@ -24,12 +35,14 @@ const client = new Client({
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
 const CLIENT_ID = process.env.CLIENT_ID;
+const BUMP_CHANNEL_ID = '1361848627789828148';
+const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 
-// List of supported languages from LibreTranslate
+// Supported languages
 const supportedLanguages = [
-  'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr', 
-  'ga', 'gl', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nb', 
-  'nl', 'pb', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sv', 'th', 'tl', 'tr', 
+  'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr',
+  'ga', 'gl', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nb',
+  'nl', 'pb', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sv', 'th', 'tl', 'tr',
   'uk', 'zh', 'zt'
 ];
 
@@ -61,14 +74,14 @@ const extremeTriggers = [
   'monkey', 'jungle bunny', 'zipperhead', 'yellow peril', 'coon', 'pickaninny',
   'gas the jews', 'heil hitler', 'sieg heil', 'kike', 'zionist pig',
   'oven dodger', 'hook nose', 'dirty jew', 'ashkenazi scum',
-  'faggot', 'dyke', 'tranny', 'no homo', 'fudge packer', 'shemale', 
+  'faggot', 'dyke', 'tranny', 'no homo', 'fudge packer', 'shemale',
   'drag freak', 'queer in a slur context', 'you’re not a real woman', 'man in a dress',
   'retard', 'spastic', 'mongoloid', 'window licker', 'cripple', 'vegetable',
   'dumbass in a targeted way', 'deaf and dumb',
   'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'make me a sandwich',
   'women can’t drive', 'she asked for it', 'rape her', 'kill her',
-  'rape', 'rape you', 'raping', 'kill yourself', 'kms', 'kys', 
-  'go hang yourself', 'slit your wrists', 'choke and die', 
+  'rape', 'rape you', 'raping', 'kill yourself', 'kms', 'kys',
+  'go hang yourself', 'slit your wrists', 'choke and die',
   'beat her', 'abuse her', 'molest', 'pedophile', 'pedo', 'groomer',
   'build the wall', 'go back to your country', 'illegal alien', 'white power',
   'white pride', 'blood and soil', 'ethnic cleansing', 'great replacement',
@@ -80,7 +93,7 @@ const extremeTriggers = [
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
 
-// Register slash commands on startup
+// Register slash commands
 const commands = require('./commands.json');
 const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
 
@@ -109,9 +122,34 @@ async function registerCommands() {
   }
 }
 
+// Check and send /bump
+async function checkAndBump() {
+  try {
+    const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+    if (!channel || !channel.isTextBased()) {
+      console.error('Bump channel not found or not text-based');
+      return;
+    }
+
+    const now = Date.now();
+    const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
+    if (now - lastBump >= BUMP_COOLDOWN) {
+      await channel.send('/bump');
+      console.log('Sent /bump command');
+      bumpData[BUMP_CHANNEL_ID] = { timestamp: now };
+      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+    }
+  } catch (err) {
+    console.error('Error in checkAndBump:', err);
+  }
+}
+
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
+  // Start periodic bump check
+  setInterval(checkAndBump, 10 * 60 * 1000); // Every 10 minutes
+  await checkAndBump(); // Initial check
 });
 
 client.on('messageCreate', async (message) => {
@@ -119,7 +157,14 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
-  // 🚨 Check for extreme/harmful content anywhere
+  // Track /bump commands
+  if (message.channel.id === BUMP_CHANNEL_ID && content === '/bump') {
+    bumpData[BUMP_CHANNEL_ID] = { timestamp: Date.now() };
+    fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+    console.log('Detected /bump in channel, updated timestamp');
+  }
+
+  // Check for extreme content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;
@@ -152,7 +197,7 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // 🎯 Moderation Logic (targeted channels only)
+  // Moderation logic
   if (targetChannels.includes(message.channel.id)) {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
@@ -160,7 +205,7 @@ client.on('messageCreate', async (message) => {
       if (fs.existsSync(filePath)) {
         const audioFile = new AttachmentBuilder(filePath);
         await message.channel.send({
-          content: `🔊 Cringe detected!`,
+          content: '🔊 Cringe detected!',
           files: [audioFile]
         });
 
@@ -177,15 +222,15 @@ client.on('messageCreate', async (message) => {
           console.error('Failed to send mod alert:', err);
         }
       } else {
-        console.error("Audio file missing at:", filePath);
+        console.error('Audio file missing at:', filePath);
       }
     }
   }
 
-  // 🌍 Set Language Command (text-based)
+  // Set language command
   if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
-    const lang = parts[1]?.toLowerCase();
+    const lang = parts[1].toLowerCase();
 
     if (!supportedLanguages.includes(lang)) {
       return message.reply('❗ Invalid language code. Allowed: ' + supportedLanguages.join(', '));

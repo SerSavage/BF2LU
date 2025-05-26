@@ -73,23 +73,23 @@ const lfgRoles = {
     title: 'Looking4Group - Battlefront 2 (2017)',
     description: 'React below to get pinged for LFG requests! Choose one or both:',
     roles: {
-      'LFG-KYBER': { emoji: 'lfg_kyber_emoji', roleId: '1364271161000591430' },
-      'LFG-VANILLA': { emoji: 'lfg_vanilla_emoji', roleId: '1364262718487531581' }
+      'LFG-KYBER': { emoji: 'KYBER', roleId: '1364271161000591430' },
+      'LFG-VANILLA': { emoji: 'VANILLA', roleId: '1364262718487531581' }
     }
   },
   'swtor': {
     title: 'The Galaxy Calls - Star Wars: The Old Republic',
     description: "Credits don't earn themselves. If you're looking for action, glory or a fat payday - Will you answer the call?",
     roles: {
-      'LFG-SWTOR': { emoji: 'lfg_swtor_emoji', roleId: '365936777176682547' }
+      'LFG-SWTOR': { emoji: 'SWTOR', roleId: '365936777176682547' }
     }
   },
   'battlefrontClassic': {
     title: 'Battlefront Classic LFG (2004/2005)',
     description: 'Looking to squad up in the original Star Wars: Battlefront I & II? Whether you\'re storming the beaches of Kashyyyk or defending the Death Star, join this role to find players for classic online sessions, mods, or LAN-based games (via SWBFSpy, GameRanger, or Steam). The battlefront is never closed—only waiting.',
     roles: {
-      'LFG-CLASSIC2004': { emoji: 'lfg_classic2004_emoji', roleId: '1371895939786080297' },
-      'LFG-CLASSIC2005': { emoji: 'lfg_classic2005_emoji', roleId: '1371897792695369778' }
+      'LFG-CLASSIC2004': { emoji: 'CLASSIC2004', roleId: '1371895939786080297' },
+      'LFG-CLASSIC2005': { emoji: 'CLASSIC2005', roleId: '1371897792695369778' }
     }
   }
 };
@@ -178,7 +178,7 @@ async function registerCommands() {
   }
 }
 
-// Create custom emojis for reaction roles
+// Create custom emojis for reaction roles (only for welcome channel)
 async function createCustomEmojis(guild, roles) {
   try {
     const existingEmojis = await guild.emojis.fetch();
@@ -280,12 +280,6 @@ async function setupLfgReactionRoles() {
     }
 
     const guild = channel.guild;
-
-    // Ensure all emojis are created
-    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
-      await createCustomEmojis(guild, roles);
-    }
-
     const emojis = await guild.emojis.fetch();
 
     // Setup each LFG message

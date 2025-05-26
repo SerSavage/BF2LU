@@ -141,7 +141,6 @@ function toAurebesh(text, useDigraphs = false) {
   text = text.toLowerCase();
   
   if (useDigraphs) {
-    // Handle digraphs first
     const digraphs = ['ch', 'th', 'sh', 'ae', 'eo', 'kh', 'ng', 'oo'];
     let i = 0;
     while (i < text.length) {
@@ -155,17 +154,17 @@ function toAurebesh(text, useDigraphs = false) {
         }
       }
       if (!matched) {
-        result += aurebeshMap[text[i]] || text[i];
+        result += aurebeshMap[text[i]] || text[i]; // Preserve special characters
         i++;
       }
     }
   } else {
-    // Letter-by-letter
     for (let char of text) {
-      result += aurebeshMap[char] || char;
+      result += aurebeshMap[char] || char; // Preserve special characters
     }
   }
   
+  console.log(`Aurebesh translation: input="${text}", useDigraphs=${useDigraphs}, output="${result}"`);
   return result;
 }
 
@@ -252,7 +251,7 @@ client.on('messageCreate', async (message) => {
         console.error("GIF file missing at:", gifPath);
       }
     } catch (err) {
-      console.error('Failed to handle extreme content:', err);
+      console.error('Failed to handle extreme content:', err.message);
     }
     return;
   }
@@ -262,27 +261,27 @@ client.on('messageCreate', async (message) => {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
 
-      if (fs.existsSync(filePath)) {
-        const audioFile = new AttachmentBuilder(filePath);
-        await message.channel.send({
-          content: '🔊 Cringe detected!',
-          files: [audioFile]
-        });
+      try {
+        if (fs.existsSync(filePath)) {
+          const audioFile = new AttachmentBuilder(filePath);
+          await message.channel.send({
+            content: '🔊 Cringe detected!',
+            files: [audioFile]
+          });
 
-        try {
           const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
           if (modChannel && modChannel.isTextBased()) {
             await modChannel.send({
               content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n` +
                        `**User:** <@${message.author.id}>\n` +
-                       `**Message:** "${message.content}"`
+                       `**Message:** ${message.content}`
             });
           }
-        } catch (err) {
-          console.error('Failed to send mod alert:', err);
+        } else {
+          console.error('Audio file not found:', filePath);
         }
-      } else {
-        console.error("Audio file missing at:", filePath);
+      } catch (err) {
+        console.error('Failed to send mod alert:', err.message);
       }
     }
   }
@@ -293,56 +292,133 @@ client.on('messageCreate', async (message) => {
     const lang = parts[1]?.toLowerCase();
 
     if (!supportedLanguages.includes(lang)) {
-      return message.reply('❗ Invalid language code. Allowed: ' + supportedLanguages.join(', '));
+      return message.reply(`❗ Invalid language code. Allowed: ${supportedLanguages.join(', ')}`);
     }
 
     users[message.author.id] = lang;
     fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
-    return message.reply(`✅ Your preferred translation language is now set to **${lang}**.`);
+    return message.reply(`✅ Your preferred translation language is now set to ${lang}.`);
   }
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
+  console.log(`Interaction received: type=${interaction.type}, command=${interaction.commandName || 'none'}`);
 
-  if (interaction.isChatInputCommand()) {
-    if (interaction.commandName === 'setlanguage') {
-      await interaction.deferReply();
-      const lang = interaction.options.getString('language').toLowerCase();
+  if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) {
+    console.log('Ignoring non-command interaction');
+    return;
+  }
 
-      if (!supportedLanguages.includes(lang)) {
-        await interaction.editReply('❗ Invalid language code. Allowed: ' + supportedLanguages.join(', '));
-        return;
+  try {
+    if (interaction.isChatInputCommand()) {
+      console.log(`Processing command: ${interaction.commandName}`);
+
+      if (interaction.commandName === 'setlanguage') {
+        await interaction.deferReply();
+        const lang = interaction.options.getString('language')?.toLowerCase();
+
+        if (!supportedLanguages.includes(lang)) {
+          await interaction.editReply(`❗ Invalid language code. Allowed: ${supportedLanguages.join(', ')}`);
+          return;
+        }
+
+        users[interaction.user.id] = lang;
+        fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
+        await interaction.editReply(`✅ Your preferred translation language is now set to ${lang}.`);
       }
 
-      users[interaction.user.id] = lang;
-      fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
-      await interaction.editReply(`✅ Your preferred translation language is now set to **${lang}**.`);
+      if (interaction.commandName === 'translate') {
+        await interaction.deferReply();
+        const text = interaction.options.getString('text');
+        let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
+
+        if (!supportedLanguages.includes(targetLang)) {
+          await interaction.editReply(`❗ Invalid target language code. Allowed: ${supportedLanguages.join(', ')}`);
+          return;
+        }
+
+        try {
+          console.log(`Detecting language for text: ${text}`);
+          const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
+          const detectedLang = detectRes.data?.[0]?.language || 'unknown';
+
+          if (!supportedLanguages.includes(detectedLang)) {
+            await interaction.editReply(`❗ Detected language not supported: ${detectedLang}`);
+            return;
+          }
+
+          console.log(`Translating from ${detectedLang} to ${targetLang}`);
+          const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+            q: text,
+            source: detectedLang,
+            target: targetLang,
+            format: 'text'
+          });
+
+          const translated = transRes.data.translatedText;
+          await interaction.editReply({
+            content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+          });
+        } catch (err) {
+          console.error('Translation error:', {
+            message: err.message,
+            response: err.response ? {
+              status: err.response.status,
+              data: err.response.data
+            } : 'No response'
+          });
+          await interaction.editReply('❌ Error translating text. Please try again later.');
+        }
+      }
+
+      if (interaction.commandName === 'aurebesh') {
+        await interaction.deferReply();
+        const text = interaction.options.getString('text');
+        const useDigraphs = interaction.options.getBoolean('use_digraphs') || false;
+
+        console.log(`Aurebesh command: text="${text}", useDigraphs=${useDigraphs}`);
+
+        try {
+          const translated = toAurebesh(text, useDigraphs);
+          await interaction.editReply({
+            content: `🌌 **Translated to Aurebesh${useDigraphs ? ' (with digraphs)' : ''}:**\n> ${translated}`
+          });
+        } catch (err) {
+          console.error('Aurebesh translation error:', err.message);
+          await interaction.editReply('❌ Error translating to Aurebesh. Please try again.');
+        }
+      }
     }
 
-    if (interaction.commandName === 'translate') {
+    if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
       await interaction.deferReply();
-      const text = interaction.options.getString('text');
-      let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
+      const message = interaction.targetMessage;
+      const targetLang = users[interaction.user.id] || 'en';
 
       if (!supportedLanguages.includes(targetLang)) {
-        await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
+        await interaction.editReply(`❗ Invalid target language code. Allowed: ${supportedLanguages.join(', ')}`);
         return;
       }
 
       try {
-        console.log(`Detecting language for text: ${text}`);
-        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
+        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content });
         const detectedLang = detectRes.data?.[0]?.language || 'unknown';
 
         if (!supportedLanguages.includes(detectedLang)) {
-          await interaction.editReply('❗ Detected language not supported: ' + detectedLang);
+          await interaction.editReply(`❗ Detected language not supported: ${detectedLang}`);
           return;
         }
 
-        console.log(`Translating from ${detectedLang} to ${targetLang}`);
+        if (detectedLang === targetLang) {
+          await interaction.editReply({
+            content: `🌍 This message is already in \`${targetLang}\`.`,
+            ephemeral: true
+          });
+          return;
+        }
+
         const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
-          q: text,
+          q: message.content,
           source: detectedLang,
           target: targetLang,
           format: 'text'
@@ -353,83 +429,20 @@ client.on('interactionCreate', async interaction => {
           content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
         });
       } catch (err) {
-        console.error('Translation error details:', {
+        console.error('Translation error:', {
           message: err.message,
           response: err.response ? {
             status: err.response.status,
             data: err.response.data
-          } : 'No response',
-          request: err.request ? err.request : 'No request'
+          } : 'No response'
         });
-        await interaction.editReply('❌ Error translating text. Please try again later.');
+        await interaction.editReply('❌ Error translating message. Please try again later.');
       }
     }
-
-    if (interaction.commandName === 'aurebesh') {
-      await interaction.deferReply();
-      const text = interaction.options.getString('text');
-      const useDigraphs = interaction.options.getBoolean('use_digraphs') || false;
-
-      try {
-        const translated = toAurebesh(text, useDigraphs);
-        await interaction.editReply({
-          content: `🌌 **Translated to Aurebesh${useDigraphs ? ' (with digraphs)' : ''}:**\n> ${translated}`
-        });
-      } catch (err) {
-        console.error('Aurebesh translation error:', err);
-        await interaction.editReply('❌ Error translating to Aurebesh. Please try again.');
-      }
-    }
-  }
-
-  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
-    await interaction.deferReply();
-    const message = interaction.targetMessage;
-    const targetLang = users[interaction.user.id] || 'en';
-
-    if (!supportedLanguages.includes(targetLang)) {
-      await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
-      return;
-    }
-
-    try {
-      const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content });
-      const detectedLang = detectRes.data?.[0]?.language || 'unknown';
-
-      if (!supportedLanguages.includes(detectedLang)) {
-        await interaction.editReply('❗ Detected language not supported: ' + detectedLang);
-        return;
-      }
-
-      if (detectedLang === targetLang) {
-        await interaction.editReply({
-          content: `🌍 This message is already in \`${targetLang}\`.`,
-          ephemeral: true
-        });
-        return;
-      }
-
-      const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
-        q: message.content,
-        source: detectedLang,
-        target: targetLang,
-        format: 'text'
-      });
-
-      const translated = transRes.data.translatedText;
-      await interaction.editReply({
-        content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
-      });
-    } catch (err) {
-      console.error('Translation error details:', {
-        message: err.message,
-        response: err.response ? {
-          status: err.response.status,
-          data: err.response.data
-        } : 'No response',
-        request: err.request ? err.request : 'No request'
-      });
-      await interaction.editReply('❌ Error translating message. Please try again later.');
+  } catch (err) {
+    console.error('Interaction error:', err.message);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: '❌ An error occurred. Please try again.', ephemeral: true }).catch(console.error);
     }
   }
 });

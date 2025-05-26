@@ -31,7 +31,6 @@
   },
   {
     "name": "translate_message",
-    "type": 3,
-    "description": "Translate this message"
+    "type": 3
   }
 ]

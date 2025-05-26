@@ -25,6 +25,17 @@ try {
   fs.writeFileSync(bumpDataFile, '{}', 'utf8');
 }
 
+// Initialize reaction role message data
+let reactionRoleData = {};
+const reactionRoleFile = path.join(__dirname, 'reaction_roles.json');
+try {
+  const reactionRoleRaw = fs.readFileSync(reactionRoleFile, 'utf8');
+  reactionRoleData = JSON.parse(reactionRoleRaw);
+} catch (err) {
+  console.warn('reaction_roles.json not found or invalid, starting with empty reaction role data:', err.message);
+  fs.writeFileSync(reactionRoleFile, '{}', 'utf8');
+}
+
 // Initialize command cooldowns (no longer needed for LFG, but kept for potential future use)
 let cooldowns = {};
 const cooldownFile = path.join(__dirname, 'cooldowns.json');
@@ -256,7 +267,7 @@ async function checkAndNotifyBump() {
     const now = new Date();
     const currentHour = now.getUTCHours() + 2; // Convert to CEST (UTC+2)
     const currentMinute = now.getUTCMinutes();
-    const startHour = 18; // 18:00 CEST
+    const startHour = 19; // 19:00 CEST
     const intervalHours = 2;
 
     // Calculate the next scheduled time

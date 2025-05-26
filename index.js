@@ -284,7 +284,7 @@ async function setupWelcomeReactionRoles() {
           .join('\n')
       )
       .setColor('#00B7EB')
-      .setFooter({ text: 'React to claim your role (disclaimer if your previous is messing up :D)!' });
+      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!') });
 
     let message;
     const existingMessageId = reactionRoleData[WELCOME_CHANNEL_ID]?.messageId;
@@ -302,8 +302,8 @@ async function setupWelcomeReactionRoles() {
       fs.writeFileSync(reactionRoleFile, JSON.stringify(reactionRoleData, null, 2), 'utf8');
     }
 
-    for (const roleName of Object.keys(welcomeRoles)) {
-      const emoji = emojiMap[roleName];
+    for (const roleName of Object.entries(welcomeRoles)) {
+      const emoji = emojiMap[roleName[1].emoji];
       if (emoji) {
         await message.react(emoji);
       }
@@ -765,6 +765,16 @@ client.on('messageReactionAdd', async (reaction, user) => {
       if (roleEntry) {
         const roleId = roleEntry[1].roleId;
         const role = guild.roles.cache.get(roleId);
+
+        // Remove all existing welcome roles before adding the new one
+        for (const [, { roleId: existingRoleId }] of Object.entries(welcomeRoles)) {
+          const existingRole = guild.roles.cache.get(existingRoleId);
+          if (existingRole && member.roles.cache.has(existingRoleId) && existingRoleId !== roleId) {
+            await member.roles.remove(existingRole);
+            console.log(`Removed role ${existingRole.name} (ID: ${existingRoleId}) from ${user.tag} in Welcome channel`);
+          }
+        }
+
         if (role) {
           await member.roles.add(role);
           console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in Welcome channel`);

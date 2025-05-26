@@ -39,6 +39,17 @@ const BUMP_CHANNEL_ID = '1361848627789828148';
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
+// Aurebesh character mapping
+const aurebeshMap = {
+  'a': 'aurek', 'b': 'besh', 'c': 'cresh', 'd': 'dorn', 'e': 'esk',
+  'f': 'forn', 'g': 'grek', 'h': 'herf', 'i': 'isk', 'j': 'jenth',
+  'k': 'krill', 'l': 'leth', 'm': 'mern', 'n': 'nern', 'o': 'osk',
+  'p': 'peth', 'q': 'qek', 'r': 'resh', 's': 'senth', 't': 'trill',
+  'u': 'usk', 'v': 'vev', 'w': 'wesk', 'x': 'xesh', 'y': 'yirt', 'z': 'zerek',
+  'ch': 'cherek', 'th': 'thesh', 'sh': 'shen', 'ae': 'enth', 'eo': 'onith',
+  'kh': 'krenth', 'ng': 'nen', 'oo': 'orenth'
+};
+
 // Supported languages
 const supportedLanguages = [
   'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr',
@@ -121,6 +132,41 @@ async function registerCommands() {
   } catch (error) {
     console.error('Error registering commands:', error);
   }
+}
+
+// Aurebesh transliteration function
+function toAurebesh(text, useDigraphs = false) {
+  if (!text) return '';
+  let result = '';
+  text = text.toLowerCase();
+  
+  if (useDigraphs) {
+    // Handle digraphs first
+    const digraphs = ['ch', 'th', 'sh', 'ae', 'eo', 'kh', 'ng', 'oo'];
+    let i = 0;
+    while (i < text.length) {
+      let matched = false;
+      if (i < text.length - 1) {
+        const pair = text.slice(i, i + 2);
+        if (digraphs.includes(pair)) {
+          result += aurebeshMap[pair] || pair;
+          i += 2;
+          matched = true;
+        }
+      }
+      if (!matched) {
+        result += aurebeshMap[text[i]] || text[i];
+        i++;
+      }
+    }
+  } else {
+    // Letter-by-letter
+    for (let char of text) {
+      result += aurebeshMap[char] || char;
+    }
+  }
+  
+  return result;
 }
 
 // Check and notify for bump
@@ -236,13 +282,11 @@ client.on('messageCreate', async (message) => {
           console.error('Failed to send mod alert:', err);
         }
       } else {
-        console.error('Audio file missing at:', filePath);
+        console.error("Audio file missing at:", filePath);
       }
     }
-  }
-
   // Set language command
-  if (message.content.startsWith('!setlang ')) {
+    if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
     const lang = parts[1]?.toLowerCase();
 
@@ -316,6 +360,22 @@ client.on('interactionCreate', async interaction => {
           request: err.request ? err.request : 'No request'
         });
         await interaction.editReply('❌ Error translating text. Please try again later.');
+      }
+    }
+
+    if (interaction.commandName === 'aurebesh') {
+      await interaction.deferReply();
+      const text = interaction.options.getString('text');
+      const useDigraphs = interaction.options.getBoolean('use_digraphs') || false;
+
+      try {
+        const translated = toAurebesh(text, useDigraphs);
+        await interaction.editReply({
+          content: `🌌 **Translated to Aurebesh${useDigraphs ? ' (with digraphs)' : ''}:**\n> ${translated}`
+        });
+      } catch (err) {
+        console.error('Aurebesh translation error:', err);
+        await interaction.editReply('❌ Error translating to Aurebesh. Please try again.');
       }
     }
   }

@@ -42,7 +42,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildEmojisAndStickers
+    GatewayIntentBits.GuildEmojisAndStickers,
+    GatewayIntentBits.GuildMembers // Added for role checking
   ]
 });
 
@@ -91,6 +92,35 @@ const lfgRoles = {
       'LFG-CLASSIC2004': { emoji: 'CLASSIC2004', roleId: '1371895939786080297' },
       'LFG-CLASSIC2005': { emoji: 'CLASSIC2005', roleId: '1371897792695369778' }
     }
+  }
+};
+
+// LFG command mappings
+const lfgCommands = {
+  'classic2005squad-up': {
+    roleId: '1371897792695369778', // LFG-CLASSIC2005
+    slashCommand: 'looking4group-classic2005time',
+    message: (user) => `📡 <@${user.id}> sounds the battle horn! The Clone Wars rage on in Battlefront Classic (2005)! <@&1371897792695369778>, assemble your squad—blasters hot, starfighters ready! Will you answer the call? 🔥`
+  },
+  'classic2004squad-up': {
+    roleId: '1371895939786080297', // LFG-CLASSIC2004
+    slashCommand: 'looking4group-classic2004time',
+    message: (user) => `📡 <@${user.id}> ignites the signal flare! The Galactic Civil War erupts in Battlefront Classic (2004)! <@&1371895939786080297>, rally your troops—AT-ATs are marching, and the Rebellion needs you! Who’s ready to fight? 🚀`
+  },
+  'swtorsquad-up': {
+    roleId: '365936777176682547', // LFG-SWTOR
+    slashCommand: 'looking4group-swtortime',
+    message: (user) => `📡 <@${user.id}> calls across the galaxy! The Old Republic needs heroes in SWTOR! <@&365936777176682547>, grab your lightsabers and blasters—Sith or Jedi, the battle awaits! Who’s joining the fight for glory? 🌌`
+  },
+  'vanillasquad-up': {
+    roleId: '1364262718487531581', // LFG-VANILLA
+    slashCommand: 'looking4group-vanillatime',
+    message: (user) => `📡 <@${user.id}> sends out the distress signal! Battlefront 2 (2017) Vanilla servers are heating up! <@&1364262718487531581>, gear up for epic battles—no mods, just pure chaos! Who’s ready to dominate the battlefield? 💥`
+  },
+  'kybersquad-up': {
+    roleId: '1364271161000591430', // LFG-KYBER
+    slashCommand: 'looking4group-kybertime',
+    message: (user) => `📡 <@${user.id}> channels the Force! The Kyber servers in Battlefront 2 (2017) are live! <@&1364271161000591430>, ignite your sabers and ready your blasters—heroes and villains clash tonight! Who’s in for the fight? ⚔️`
   }
 };
 
@@ -406,6 +436,33 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
+  // Handle LFG squad-up commands
+  if (message.channel.id === '1364277004198875278' && content.startsWith('!')) {
+    const command = content.slice(1); // Remove the '!' prefix
+    const lfgCommand = Object.keys(lfgCommands).find(cmd => cmd === command);
+
+    if (lfgCommand) {
+      try {
+        const guild = message.guild;
+        const member = await guild.members.fetch(message.author.id);
+        const roleId = lfgCommands[lfgCommand].roleId;
+
+        if (!member.roles.cache.has(roleId)) {
+          await message.reply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
+          return;
+        }
+
+        const callToArms = lfgCommands[lfgCommand].message(message.author.id);
+        await message.channel.send(callToArms);
+        console.log(`LFG command ${command} executed by ${message.author.tag}, role ID: ${roleId}`);
+      } catch (err) {
+        console.error(`Error handling LFG command ${command}:`, err.message);
+        await message.reply('❌ An error occurred while processing your request.');
+      }
+      return;
+    }
+  }
+
   if (
     message.channel.id === BUMP_CHANNEL_ID &&
     content === '/bump' &&
@@ -509,6 +566,32 @@ client.on('interactionCreate', async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
       console.log(`Processing command: ${interaction.commandName}`);
+
+      // Handle LFG slash commands
+      const lfgCommandEntry = Object.values(lfgCommands).find(
+        cmd => cmd.slashCommand === interaction.commandName
+      );
+      if (lfgCommandEntry && interaction.channel.id === '1364277004198875278') {
+        await interaction.deferReply();
+        try {
+          const guild = interaction.guild;
+          const member = await guild.members.fetch(interaction.user.id);
+          const roleId = lfgCommandEntry.roleId;
+
+          if (!member.roles.cache.has(roleId)) {
+            await interaction.editReply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
+            return;
+          }
+
+          const callToArms = lfgCommandEntry.message(interaction.user.id);
+          await interaction.editReply(callToArms);
+          console.log(`LFG slash command ${interaction.commandName} executed by ${interaction.user.tag}, role ID: ${roleId}`);
+        } catch (err) {
+          console.error(`Error handling LFG slash command ${interaction.commandName}:`, err.message);
+          await interaction.editReply('❌ An error occurred while processing your request.');
+        }
+        return;
+      }
 
       if (interaction.commandName === 'setlanguage') {
         await interaction.deferReply();

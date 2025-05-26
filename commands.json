@@ -32,23 +32,5 @@
   {
     "name": "translate_message",
     "type": 3
-  },
-  {
-    "name": "aurebesh",
-    "description": "Translate English text to Aurebesh (Star Wars alphabet)",
-    "options": [
-      {
-        "name": "text",
-        "description": "The English text to translate",
-        "type": 3,
-        "required": true
-      },
-      {
-        "name": "use_digraphs",
-        "description": "Use digraphs like 'ch' and 'th' (default: false)",
-        "type": 5,
-        "required": false
-      }
-    ]
   }
 ]

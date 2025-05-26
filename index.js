@@ -296,16 +296,31 @@ async function setupLfgReactionRoles() {
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(
-          `${description}\n\n` +
-          '**Choose your role:**\n' +
-          Object.keys(roles)
-            .map(role => `${emojiMap[role] || '❓'} - ${role}`)
-            .join('\n')
-        )
-        .setColor('#00B7EB')
-        .setFooter({ text: 'React to join the LFG role!' });
+        .setColor('#808080') // Grey border color
+        .addFields(
+          {
+            name: `\`\`\`ansi\n\u001b[37m${title}\u001b[0m\`\`\``, // White text in grey field
+            value: '\u200b', // Non-breaking space to separate title
+            inline: false
+          },
+          {
+            name: '\u200b',
+            value: `\`\`\`ansi\n\u001b[37m${description}\u001b[0m\`\`\``, // White text in grey field
+            inline: false
+          },
+          {
+            name: '\u200b',
+            value: `\`\`\`ansi\n\u001b[37m**Choose your role:**\n${Object.keys(roles)
+              .map(role => `${emojiMap[role] || '❓'} - ${role}`)
+              .join('\n')}\u001b[0m\`\`\``, // White text in grey field
+            inline: false
+          },
+          {
+            name: '\u200b',
+            value: `\`\`\`ansi\n\u001b[37mReact to join the LFG role!\u001b[0m\`\`\``, // White text in grey field
+            inline: false
+          }
+        );
 
       let message;
       const existingMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;

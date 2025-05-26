@@ -134,12 +134,16 @@ async function checkAndNotifyBump() {
 
     const now = Date.now();
     const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
-    if (now - lastBump >= BUMP_COOLDOWN) {
+    const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
+
+    if (now - lastBump >= BUMP_COOLDOWN && !notified) {
       const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
       await channel.send(
         `${userMentions}, it’s time to shine! Let’s keep our community buzzing—give the server a /bump to boost our visibility! 🚀 Your energy makes all the difference!`
       );
-      console.log('Sent bump notification');
+      console.log(`Sent bump notification at ${new Date(now).toISOString()}`);
+      bumpData[BUMP_CHANNEL_ID] = { ...bumpData[BUMP_CHANNEL_ID], notified: true };
+      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
     }
   } catch (err) {
     console.error('Error in checkAndNotifyBump:', err);
@@ -167,7 +171,8 @@ client.on('messageCreate', async (message) => {
   ) {
     bumpData[BUMP_CHANNEL_ID] = {
       timestamp: Date.now(),
-      userId: message.author.id
+      userId: message.author.id,
+      notified: false
     };
     fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
     console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);

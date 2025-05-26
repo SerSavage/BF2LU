@@ -50,11 +50,12 @@ const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translatio
 const CLIENT_ID = process.env.CLIENT_ID;
 const BUMP_CHANNEL_ID = '1361848627789828148';
 const WELCOME_CHANNEL_ID = '1361849763611541584';
+const LFG_CHANNEL_ID = '1364996738808807474';
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
-// Role to emoji and role ID mapping
-const reactionRoles = {
+// Welcome channel reaction roles
+const welcomeRoles = {
   'Guardian': { emoji: 'guardian_emoji', roleId: '1362488297510797443' },
   'Consular': { emoji: 'consular_emoji', roleId: '1362488420299047024' },
   'Marauder': { emoji: 'marauder_emoji', roleId: '1362488467757465981' },
@@ -64,6 +65,33 @@ const reactionRoles = {
   'Grey Warden': { emoji: 'greywarden_emoji', roleId: '1362489042821972219' },
   'Inquisitor': { emoji: 'inquisitor_emoji', roleId: '1362490015648579845' },
   'Sorcerer': { emoji: 'sorcerer_emoji', roleId: '1362490083017625640' }
+};
+
+// LFG channel reaction roles (3 messages)
+const lfgRoles = {
+  'battlefront2': {
+    title: 'Looking4Group - Battlefront 2 (2017)',
+    description: 'React below to get pinged for LFG requests! Choose one or both:',
+    roles: {
+      'LFG-KYBER': { emoji: 'lfg_kyber_emoji', roleId: '1364271161000591430' },
+      'LFG-VANILLA': { emoji: 'lfg_vanilla_emoji', roleId: '1364262718487531581' }
+    }
+  },
+  'swtor': {
+    title: 'The Galaxy Calls - Star Wars: The Old Republic',
+    description: "Credits don't earn themselves. If you're looking for action, glory or a fat payday - Will you answer the call?",
+    roles: {
+      'LFG-SWTOR': { emoji: 'lfg_swtor_emoji', roleId: '365936777176682547' }
+    }
+  },
+  'battlefrontClassic': {
+    title: 'Battlefront Classic LFG (2004/2005)',
+    description: 'Looking to squad up in the original Star Wars: Battlefront I & II? Whether you\'re storming the beaches of Kashyyyk or defending the Death Star, join this role to find players for classic online sessions, mods, or LAN-based games (via SWBFSpy, GameRanger, or Steam). The battlefront is never closed—only waiting.',
+    roles: {
+      'LFG-CLASSIC2004': { emoji: 'lfg_classic2004_emoji', roleId: '1371895939786080297' },
+      'LFG-CLASSIC2005': { emoji: 'lfg_classic2005_emoji', roleId: '1371897792695369778' }
+    }
+  }
 };
 
 // Supported languages
@@ -151,10 +179,10 @@ async function registerCommands() {
 }
 
 // Create custom emojis for reaction roles
-async function createCustomEmojis(guild) {
+async function createCustomEmojis(guild, roles) {
   try {
     const existingEmojis = await guild.emojis.fetch();
-    for (const [roleName, { emoji: emojiName }] of Object.entries(reactionRoles)) {
+    for (const [roleName, { emoji: emojiName }] of Object.entries(roles)) {
       if (!existingEmojis.some(emoji => emoji.name === emojiName)) {
         const emojiPath = path.join(__dirname, 'media', `${roleName.replace(/ /g, '')}.png`);
         if (fs.existsSync(emojiPath)) {
@@ -174,8 +202,8 @@ async function createCustomEmojis(guild) {
   }
 }
 
-// Setup reaction role message
-async function setupReactionRoles() {
+// Setup welcome channel reaction roles
+async function setupWelcomeReactionRoles() {
   try {
     const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) {
@@ -184,12 +212,11 @@ async function setupReactionRoles() {
     }
 
     const guild = channel.guild;
-    await createCustomEmojis(guild);
+    await createCustomEmojis(guild, welcomeRoles);
 
-    // Fetch existing emojis
     const emojis = await guild.emojis.fetch();
     const emojiMap = {};
-    for (const [roleName, { emoji: emojiName }] of Object.entries(reactionRoles)) {
+    for (const [roleName, { emoji: emojiName }] of Object.entries(welcomeRoles)) {
       const emoji = emojis.find(e => e.name === emojiName);
       if (emoji) {
         emojiMap[roleName] = emoji;
@@ -198,28 +225,26 @@ async function setupReactionRoles() {
       }
     }
 
-    // Create embed
     const embed = new EmbedBuilder()
       .setTitle('The strongest stars have hearts of kyber.')
       .setDescription(
         'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n' +
         'Now it’s your turn.\n\n' +
         '**Choose your path:**\n' +
-        Object.keys(reactionRoles)
+        Object.keys(welcomeRoles)
           .map(role => `${emojiMap[role] || '❓'} - ${role}`)
           .join('\n')
       )
       .setColor('#00B7EB')
       .setFooter({ text: 'React to claim your role (disclaimer if your previous is messing up :D)!' });
 
-    // Check if message already exists
     let message;
     const existingMessageId = reactionRoleData[WELCOME_CHANNEL_ID]?.messageId;
     if (existingMessageId) {
       try {
         message = await channel.messages.fetch(existingMessageId);
       } catch (err) {
-        console.warn('Reaction role message not found, creating new one:', err.message);
+        console.warn('Welcome reaction role message not found, creating new one:', err.message);
       }
     }
 
@@ -229,15 +254,84 @@ async function setupReactionRoles() {
       fs.writeFileSync(reactionRoleFile, JSON.stringify(reactionRoleData, null, 2), 'utf8');
     }
 
-    // Add reactions
-    for (const roleName of Object.keys(reactionRoles)) {
+    for (const roleName of Object.keys(welcomeRoles)) {
       const emoji = emojiMap[roleName];
       if (emoji) {
         await message.react(emoji);
       }
     }
   } catch (err) {
-    console.error('Error setting up reaction roles:', err.message);
+    console.error('Error setting up welcome reaction roles:', err.message);
+  }
+}
+
+// Setup LFG channel reaction roles
+async function setupLfgReactionRoles() {
+  try {
+    const channel = await client.channels.fetch(LFG_CHANNEL_ID);
+    if (!channel || !channel.isTextBased()) {
+      console.error('LFG channel not found or not text-based');
+      return;
+    }
+
+    const guild = channel.guild;
+
+    // Ensure all emojis are created
+    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
+      await createCustomEmojis(guild, roles);
+    }
+
+    const emojis = await guild.emojis.fetch();
+
+    // Setup each LFG message
+    for (const [messageKey, { title, description, roles }] of Object.entries(lfgRoles)) {
+      const emojiMap = {};
+      for (const [roleName, { emoji: emojiName }] of Object.entries(roles)) {
+        const emoji = emojis.find(e => e.name === emojiName);
+        if (emoji) {
+          emojiMap[roleName] = emoji;
+        } else {
+          console.warn(`Emoji not found for role: ${roleName} in ${messageKey}`);
+        }
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(
+          `${description}\n\n` +
+          '**Choose your role:**\n' +
+          Object.keys(roles)
+            .map(role => `${emojiMap[role] || '❓'} - ${role}`)
+            .join('\n')
+        )
+        .setColor('#00B7EB')
+        .setFooter({ text: 'React to join the LFG role!' });
+
+      let message;
+      const existingMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
+      if (existingMessageId) {
+        try {
+          message = await channel.messages.fetch(existingMessageId);
+        } catch (err) {
+          console.warn(`LFG reaction role message (${messageKey}) not found, creating new one:`, err.message);
+        }
+      }
+
+      if (!message) {
+        message = await channel.send({ embeds: [embed] });
+        reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`] = { messageId: message.id };
+        fs.writeFileSync(reactionRoleFile, JSON.stringify(reactionRoleData, null, 2), 'utf8');
+      }
+
+      for (const roleName of Object.keys(roles)) {
+        const emoji = emojiMap[roleName];
+        if (emoji) {
+          await message.react(emoji);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error setting up LFG reaction roles:', err.message);
   }
 }
 
@@ -282,7 +376,8 @@ async function checkAndNotifyBump() {
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
-  await setupReactionRoles();
+  await setupWelcomeReactionRoles();
+  await setupLfgReactionRoles();
   setInterval(checkAndNotifyBump, 10 * 60 * 1000);
   await checkAndNotifyBump();
 });
@@ -515,60 +610,134 @@ client.on('interactionCreate', async interaction => {
 // Handle reaction role add
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot) return;
-  if (reaction.message.channel.id !== WELCOME_CHANNEL_ID) return;
-  if (reaction.message.id !== reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) return;
 
-  try {
-    const guild = reaction.message.guild;
-    const member = await guild.members.fetch(user.id);
-    const emojiName = reaction.emoji.name;
+  const channelId = reaction.message.channel.id;
+  const messageId = reaction.message.id;
 
-    const roleEntry = Object.entries(reactionRoles).find(
-      ([_, { emoji }]) => emoji === emojiName
-    );
+  // Handle Welcome channel reactions
+  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
+    try {
+      const guild = reaction.message.guild;
+      const member = await guild.members.fetch(user.id);
+      const emojiName = reaction.emoji.name;
 
-    if (roleEntry) {
-      const roleId = roleEntry[1].roleId;
-      const role = guild.roles.cache.get(roleId);
-      if (role) {
-        await member.roles.add(role);
-        console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag}`);
-      } else {
-        console.warn(`Role not found: ${roleId}`);
+      const roleEntry = Object.entries(welcomeRoles).find(
+        ([_, { emoji }]) => emoji === emojiName
+      );
+
+      if (roleEntry) {
+        const roleId = roleEntry[1].roleId;
+        const role = guild.roles.cache.get(roleId);
+        if (role) {
+          await member.roles.add(role);
+          console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in Welcome channel`);
+        } else {
+          console.warn(`Role not found: ${roleId} in Welcome channel`);
+        }
       }
+    } catch (err) {
+      console.error('Error adding reaction role in Welcome channel:', err.message);
     }
-  } catch (err) {
-    console.error('Error adding reaction role:', err.message);
+    return;
+  }
+
+  // Handle LFG channel reactions
+  if (channelId === LFG_CHANNEL_ID) {
+    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
+      const lfgMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
+      if (messageId !== lfgMessageId) continue;
+
+      try {
+        const guild = reaction.message.guild;
+        const member = await guild.members.fetch(user.id);
+        const emojiName = reaction.emoji.name;
+
+        const roleEntry = Object.entries(roles).find(
+          ([_, { emoji }]) => emoji === emojiName
+        );
+
+        if (roleEntry) {
+          const roleId = roleEntry[1].roleId;
+          const role = guild.roles.cache.get(roleId);
+          if (role) {
+            await member.roles.add(role);
+            console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in LFG channel (${messageKey})`);
+          } else {
+            console.warn(`Role not found: ${roleId} in LFG channel (${messageKey})`);
+          }
+        }
+      } catch (err) {
+        console.error(`Error adding reaction role in LFG channel (${messageKey}):`, err.message);
+      }
+      break;
+    }
   }
 });
 
 // Handle reaction role remove
 client.on('messageReactionRemove', async (reaction, user) => {
   if (user.bot) return;
-  if (reaction.message.channel.id !== WELCOME_CHANNEL_ID) return;
-  if (reaction.message.id !== reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) return;
 
-  try {
-    const guild = reaction.message.guild;
-    const member = await guild.members.fetch(user.id);
-    const emojiName = reaction.emoji.name;
+  const channelId = reaction.message.channel.id;
+  const messageId = reaction.message.id;
 
-    const roleEntry = Object.entries(reactionRoles).find(
-      ([_, { emoji }]) => emoji === emojiName
-    );
+  // Handle Welcome channel reactions
+  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
+    try {
+      const guild = reaction.message.guild;
+      const member = await guild.members.fetch(user.id);
+      const emojiName = reaction.emoji.name;
 
-    if (roleEntry) {
-      const roleId = roleEntry[1].roleId;
-      const role = guild.roles.cache.get(roleId);
-      if (role) {
-        await member.roles.remove(role);
-        console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag}`);
-      } else {
-        console.warn(`Role not found: ${roleId}`);
+      const roleEntry = Object.entries(welcomeRoles).find(
+        ([_, { emoji }]) => emoji === emojiName
+      );
+
+      if (roleEntry) {
+        const roleId = roleEntry[1].roleId;
+        const role = guild.roles.cache.get(roleId);
+        if (role) {
+          await member.roles.remove(role);
+          console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag} in Welcome channel`);
+        } else {
+          console.warn(`Role not found: ${roleId} in Welcome channel`);
+        }
       }
+    } catch (err) {
+      console.error('Error removing reaction role in Welcome channel:', err.message);
     }
-  } catch (err) {
-    console.error('Error removing reaction role:', err.message);
+    return;
+  }
+
+  // Handle LFG channel reactions
+  if (channelId === LFG_CHANNEL_ID) {
+    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
+      const lfgMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
+      if (messageId !== lfgMessageId) continue;
+
+      try {
+        const guild = reaction.message.guild;
+        const member = await guild.members.fetch(user.id);
+        const emojiName = reaction.emoji.name;
+
+        const roleEntry = Object.entries(roles).find(
+          ([_, { emoji }]) => emoji === emojiName
+        );
+
+        if (roleEntry) {
+          const roleId = roleEntry[1].roleId;
+          const role = guild.roles.cache.get(roleId);
+          if (role) {
+            await member.roles.remove(role);
+            console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag} in LFG channel (${messageKey})`);
+          } else {
+            console.warn(`Role not found: ${roleId} in LFG channel (${messageKey})`);
+          }
+        }
+      } catch (err) {
+        console.error(`Error removing reaction role in LFG channel (${messageKey}):`, err.message);
+      }
+      break;
+    }
   }
 });
 

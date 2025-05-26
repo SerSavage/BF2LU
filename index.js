@@ -53,17 +53,17 @@ const WELCOME_CHANNEL_ID = '1361849763611541584';
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
-// Role to emoji mapping
+// Role to emoji and role ID mapping
 const reactionRoles = {
-  'Guardian': 'guardian_emoji',
-  'Consular': 'consular_emoji',
-  'Marauder': 'marauder_emoji',
-  'Sentinel': 'sentinel_emoji',
-  'Mandalorian': 'mandalorian_emoji',
-  'Balanced': 'balanced_emoji',
-  'Grey Warden': 'greywarden_emoji',
-  'Inquisitor': 'inquisitor_emoji',
-  'Sorcerer': 'sorcerer_emoji'
+  'Guardian': { emoji: 'guardian_emoji', roleId: '1362488297510797443' },
+  'Consular': { emoji: 'consular_emoji', roleId: '1362488420299047024' },
+  'Marauder': { emoji: 'marauder_emoji', roleId: '1362488467757465981' },
+  'Sentinel': { emoji: 'sentinel_emoji', roleId: '1362488521671311601' },
+  'Mandalorian': { emoji: 'mandalorian_emoji', roleId: '1362488684469026976' },
+  'Balanced': { emoji: 'balanced_emoji', roleId: '1362488725111705650' },
+  'Grey Warden': { emoji: 'greywarden_emoji', roleId: '1362489042821972219' },
+  'Inquisitor': { emoji: 'inquisitor_emoji', roleId: '1362490015648579845' },
+  'Sorcerer': { emoji: 'sorcerer_emoji', roleId: '1362490083017625640' }
 };
 
 // Supported languages
@@ -154,9 +154,9 @@ async function registerCommands() {
 async function createCustomEmojis(guild) {
   try {
     const existingEmojis = await guild.emojis.fetch();
-    for (const [roleName, emojiName] of Object.entries(reactionRoles)) {
+    for (const [roleName, { emoji: emojiName }] of Object.entries(reactionRoles)) {
       if (!existingEmojis.some(emoji => emoji.name === emojiName)) {
-        const emojiPath = path.join(__dirname, 'media', `${roleName}.png`);
+        const emojiPath = path.join(__dirname, 'media', `${roleName.replace(/ /g, '')}.png`);
         if (fs.existsSync(emojiPath)) {
           const emojiData = fs.readFileSync(emojiPath);
           await guild.emojis.create({
@@ -189,7 +189,7 @@ async function setupReactionRoles() {
     // Fetch existing emojis
     const emojis = await guild.emojis.fetch();
     const emojiMap = {};
-    for (const [roleName, emojiName] of Object.entries(reactionRoles)) {
+    for (const [roleName, { emoji: emojiName }] of Object.entries(reactionRoles)) {
       const emoji = emojis.find(e => e.name === emojiName);
       if (emoji) {
         emojiMap[roleName] = emoji;
@@ -209,8 +209,8 @@ async function setupReactionRoles() {
           .map(role => `${emojiMap[role] || '❓'} - ${role}`)
           .join('\n')
       )
-      .setColor('#00B7EB') // Kyber crystal blue
-      .setFooter({ text: 'React to claim your role!' });
+      .setColor('#00B7EB')
+      .setFooter({ text: 'React to claim your role (disclaimer if your previous is messing up :D)!' });
 
     // Check if message already exists
     let message;
@@ -254,7 +254,7 @@ async function checkAndNotifyBump() {
     const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
     const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
     const lastBumperId = bumpData[BUMP_CHANNEL_ID]?.userId;
-    let lastBumperTag = 'someone'; // Default if no bumper
+    let lastBumperTag = 'someone';
 
     if (lastBumperId) {
       try {
@@ -283,9 +283,8 @@ client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
   await setupReactionRoles();
-  // Start periodic bump check
-  setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
-  await checkAndNotifyBump(); // Initial check
+  setInterval(checkAndNotifyBump, 10 * 60 * 1000);
+  await checkAndNotifyBump();
 });
 
 client.on('messageCreate', async (message) => {
@@ -293,7 +292,6 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
-  // Track /bump commands from specific users
   if (
     message.channel.id === BUMP_CHANNEL_ID &&
     content === '/bump' &&
@@ -308,7 +306,6 @@ client.on('messageCreate', async (message) => {
     console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
   }
 
-  // Check for extreme content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
     try {
       const channel = message.channel;
@@ -340,7 +337,6 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Moderation logic
   if (targetChannels.includes(message.channel.id)) {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
@@ -370,7 +366,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Set language command
   if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
     const lang = parts[1]?.toLowerCase();
@@ -528,17 +523,18 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const member = await guild.members.fetch(user.id);
     const emojiName = reaction.emoji.name;
 
-    const roleName = Object.keys(reactionRoles).find(
-      role => reactionRoles[role] === emojiName
+    const roleEntry = Object.entries(reactionRoles).find(
+      ([_, { emoji }]) => emoji === emojiName
     );
 
-    if (roleName) {
-      const role = guild.roles.cache.find(r => r.name === roleName);
+    if (roleEntry) {
+      const roleId = roleEntry[1].roleId;
+      const role = guild.roles.cache.get(roleId);
       if (role) {
         await member.roles.add(role);
-        console.log(`Assigned role ${roleName} to ${user.tag}`);
+        console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag}`);
       } else {
-        console.warn(`Role not found: ${roleName}`);
+        console.warn(`Role not found: ${roleId}`);
       }
     }
   } catch (err) {
@@ -557,17 +553,18 @@ client.on('messageReactionRemove', async (reaction, user) => {
     const member = await guild.members.fetch(user.id);
     const emojiName = reaction.emoji.name;
 
-    const roleName = Object.keys(reactionRoles).find(
-      role => reactionRoles[role] === emojiName
+    const roleEntry = Object.entries(reactionRoles).find(
+      ([_, { emoji }]) => emoji === emojiName
     );
 
-    if (roleName) {
-      const role = guild.roles.cache.find(r => r.name === roleName);
+    if (roleEntry) {
+      const roleId = roleEntry[1].roleId;
+      const role = guild.roles.cache.get(roleId);
       if (role) {
         await member.roles.remove(role);
-        console.log(`Removed role ${roleName} from ${user.tag}`);
+        console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag}`);
       } else {
-        console.warn(`Role not found: ${roleName}`);
+        console.warn(`Role not found: ${roleId}`);
       }
     }
   } catch (err) {

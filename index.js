@@ -36,6 +36,19 @@ try {
   fs.writeFileSync(reactionRoleFile, '{}', 'utf8');
 }
 
+// Initialize command cooldowns
+let cooldowns = {};
+const cooldownFile = path.join(__dirname, 'cooldowns.json');
+try {
+  const cooldownData = fs.readFileSync(cooldownFile, 'utf8');
+  cooldowns = JSON.parse(cooldownData);
+} catch (err) {
+  console.warn('cooldowns.json not found or invalid, starting with empty cooldowns object:', err.message);
+  fs.writeFileSync(cooldownFile, '{}', 'utf8');
+}
+
+const COOLDOWN_DURATION = 30 * 60 * 1000; // 30 minutes in ms
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -43,7 +56,7 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildEmojisAndStickers,
-    GatewayIntentBits.GuildMembers // Added for role checking
+    GatewayIntentBits.GuildMembers
   ]
 });
 
@@ -446,6 +459,15 @@ client.on('messageCreate', async (message) => {
         const guild = message.guild;
         const member = await guild.members.fetch(message.author.id);
         const roleId = lfgCommands[lfgCommand].roleId;
+        const userId = message.author.id;
+        const now = Date.now();
+
+        // Check cooldown
+        if (cooldowns[userId] && (now - cooldowns[userId]) < COOLDOWN_DURATION) {
+          const timeLeft = Math.ceil((COOLDOWN_DURATION - (now - cooldowns[userId])) / 60000);
+          await message.reply(`⏳ You're on cooldown! Please wait ${timeLeft} minute(s) before using this command again.`);
+          return;
+        }
 
         if (!member.roles.cache.has(roleId)) {
           await message.reply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
@@ -454,6 +476,8 @@ client.on('messageCreate', async (message) => {
 
         const callToArms = lfgCommands[lfgCommand].message(message.author.id);
         await message.channel.send(callToArms);
+        cooldowns[userId] = now;
+        fs.writeFileSync(cooldownFile, JSON.stringify(cooldowns, null, 2), 'utf8');
         console.log(`LFG command ${command} executed by ${message.author.tag}, role ID: ${roleId}`);
       } catch (err) {
         console.error(`Error handling LFG command ${command}:`, err.message);
@@ -577,6 +601,15 @@ client.on('interactionCreate', async interaction => {
           const guild = interaction.guild;
           const member = await guild.members.fetch(interaction.user.id);
           const roleId = lfgCommandEntry.roleId;
+          const userId = interaction.user.id;
+          const now = Date.now();
+
+          // Check cooldown
+          if (cooldowns[userId] && (now - cooldowns[userId]) < COOLDOWN_DURATION) {
+            const timeLeft = Math.ceil((COOLDOWN_DURATION - (now - cooldowns[userId])) / 60000);
+            await interaction.editReply(`⏳ You're on cooldown! Please wait ${timeLeft} minute(s) before using this command again.`);
+            return;
+          }
 
           if (!member.roles.cache.has(roleId)) {
             await interaction.editReply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
@@ -585,6 +618,8 @@ client.on('interactionCreate', async interaction => {
 
           const callToArms = lfgCommandEntry.message(interaction.user.id);
           await interaction.editReply(callToArms);
+          cooldowns[userId] = now;
+          fs.writeFileSync(cooldownFile, JSON.stringify(cooldowns, null, 2), 'utf8');
           console.log(`LFG slash command ${interaction.commandName} executed by ${interaction.user.tag}, role ID: ${roleId}`);
         } catch (err) {
           console.error(`Error handling LFG slash command ${interaction.commandName}:`, err.message);
@@ -752,21 +787,27 @@ client.on('messageReactionAdd', async (reaction, user) => {
       try {
         const guild = reaction.message.guild;
         const member = await guild.members.fetch(user.id);
-        const emojiName = reaction.emoji.name;
+        const emoji = reaction.emoji;
+        const emojiName = emoji.name || (emoji.id ? await guild.emojis.fetch(emoji.id).then(e => e.name) : null);
+
+        console.log(`Reaction added: user=${user.tag}, channel=${channelId}, message=${messageId}, emojiName=${emojiName}, messageKey=${messageKey}`);
 
         const roleEntry = Object.entries(roles).find(
-          ([_, { emoji }]) => emoji === emojiName
+          ([_, { emoji: roleEmoji }]) => roleEmoji === emojiName
         );
 
         if (roleEntry) {
+          const roleName = roleEntry[0];
           const roleId = roleEntry[1].roleId;
           const role = guild.roles.cache.get(roleId);
           if (role) {
             await member.roles.add(role);
-            console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in LFG channel (${messageKey})`);
+            console.log(`Assigned role ${roleName} (ID: ${roleId}) to ${user.tag} in LFG channel (${messageKey})`);
           } else {
             console.warn(`Role not found: ${roleId} in LFG channel (${messageKey})`);
           }
+        } else {
+          console.warn(`No matching role found for emoji ${emojiName} in message ${messageKey}`);
         }
       } catch (err) {
         console.error(`Error adding reaction role in LFG channel (${messageKey}):`, err.message);

@@ -187,6 +187,11 @@ async function createCustomEmojis(guild, roles) {
         const emojiPath = path.join(__dirname, 'media', `${roleName.replace(/ /g, '')}.png`);
         if (fs.existsSync(emojiPath)) {
           const emojiData = fs.readFileSync(emojiPath);
+          const stats = fs.statSync(emojiPath);
+          if (stats.size > 256 * 1024) {
+            console.warn(`Emoji file too large: ${emojiPath} (${stats.size} bytes, max 256KB)`);
+            continue;
+          }
           await guild.emojis.create({
             attachment: emojiData,
             name: emojiName
@@ -299,25 +304,25 @@ async function setupLfgReactionRoles() {
         .setColor('#808080') // Grey border color
         .addFields(
           {
-            name: `\`\`\`ansi\n\u001b[37m${title}\u001b[0m\`\`\``, // White text in grey field
+            name: title,
             value: '\u200b', // Non-breaking space to separate title
             inline: false
           },
           {
             name: '\u200b',
-            value: `\`\`\`ansi\n\u001b[37m${description}\u001b[0m\`\`\``, // White text in grey field
+            value: description,
             inline: false
           },
           {
             name: '\u200b',
-            value: `\`\`\`ansi\n\u001b[37m**Choose your role:**\n${Object.keys(roles)
+            value: `**Choose your role:**\n${Object.keys(roles)
               .map(role => `${emojiMap[role] || '❓'} - ${role}`)
-              .join('\n')}\u001b[0m\`\`\``, // White text in grey field
+              .join('\n')}`,
             inline: false
           },
           {
             name: '\u200b',
-            value: `\`\`\`ansi\n\u001b[37mReact to join the LFG role!\u001b[0m\`\`\``, // White text in grey field
+            value: 'React to join the LFG role!',
             inline: false
           }
         );
@@ -327,6 +332,7 @@ async function setupLfgReactionRoles() {
       if (existingMessageId) {
         try {
           message = await channel.messages.fetch(existingMessageId);
+          await message.edit({ embeds: [embed] }); // Update existing message
         } catch (err) {
           console.warn(`LFG reaction role message (${messageKey}) not found, creating new one:`, err.message);
         }
@@ -341,7 +347,11 @@ async function setupLfgReactionRoles() {
       for (const roleName of Object.keys(roles)) {
         const emoji = emojiMap[roleName];
         if (emoji) {
-          await message.react(emoji);
+          try {
+            await message.react(emoji);
+          } catch (err) {
+            console.error(`Failed to add reaction for ${roleName} (${emoji.name}):`, err.message);
+          }
         }
       }
     }

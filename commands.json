@@ -32,5 +32,25 @@
   {
     "name": "translate_message",
     "type": 3
+  },
+  {
+    "name": "looking4group-classic2005time",
+    "description": "Ping LFG-CLASSIC2005 role to squad up for Battlefront Classic 2005!"
+  },
+  {
+    "name": "looking4group-classic2004time",
+    "description": "Ping LFG-CLASSIC2004 role to squad up for Battlefront Classic 2004!"
+  },
+  {
+    "name": "looking4group-swtortime",
+    "description": "Ping LFG-SWTOR role to squad up for Star Wars: The Old Republic!"
+  },
+  {
+    "name": "looking4group-vanillatime",
+    "description": "Ping LFG-VANILLA role to squad up for Battlefront 2 (2017) Vanilla!"
+  },
+  {
+    "name": "looking4group-kybertime",
+    "description": "Ping LFG-KYBER role to squad up for Battlefront 2 (2017) Kyber!"
   }
 ]

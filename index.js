@@ -25,18 +25,7 @@ try {
   fs.writeFileSync(bumpDataFile, '{}', 'utf8');
 }
 
-// Initialize reaction role message data
-let reactionRoleData = {};
-const reactionRoleFile = path.join(__dirname, 'reaction_roles.json');
-try {
-  const reactionRoleRaw = fs.readFileSync(reactionRoleFile, 'utf8');
-  reactionRoleData = JSON.parse(reactionRoleRaw);
-} catch (err) {
-  console.warn('reaction_roles.json not found or invalid, starting with empty reaction role data:', err.message);
-  fs.writeFileSync(reactionRoleFile, '{}', 'utf8');
-}
-
-// Initialize command cooldowns
+// Initialize command cooldowns (no longer needed for LFG, but kept for potential future use)
 let cooldowns = {};
 const cooldownFile = path.join(__dirname, 'cooldowns.json');
 try {
@@ -46,8 +35,6 @@ try {
   console.warn('cooldowns.json not found or invalid, starting with empty cooldowns object:', err.message);
   fs.writeFileSync(cooldownFile, '{}', 'utf8');
 }
-
-const COOLDOWN_DURATION = 30 * 60 * 1000; // 30 minutes in ms
 
 const client = new Client({
   intents: [
@@ -64,7 +51,7 @@ const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translatio
 const CLIENT_ID = process.env.CLIENT_ID;
 const BUMP_CHANNEL_ID = '1361848627789828148';
 const WELCOME_CHANNEL_ID = '1361849763611541584';
-const LFG_CHANNEL_ID = '1364996738808807474';
+const LFG_CHANNEL_ID = '1364996738808807474'; // Kept as constant but no longer used
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
@@ -79,62 +66,6 @@ const welcomeRoles = {
   'Grey Warden': { emoji: 'greywarden_emoji', roleId: '1362489042821972219' },
   'Inquisitor': { emoji: 'inquisitor_emoji', roleId: '1362490015648579845' },
   'Sorcerer': { emoji: 'sorcerer_emoji', roleId: '1362490083017625640' }
-};
-
-// LFG channel reaction roles (3 messages)
-const lfgRoles = {
-  'battlefront2': {
-    title: 'Looking4Group - Battlefront 2 (2017)',
-    description: 'React below to get pinged for LFG requests! Choose one or both:',
-    roles: {
-      'LFG-KYBER': { emoji: 'KYBER', roleId: '1364271161000591430' },
-      'LFG-VANILLA': { emoji: 'VANILLA', roleId: '1364262718487531581' }
-    }
-  },
-  'swtor': {
-    title: 'The Galaxy Calls - Star Wars: The Old Republic',
-    description: "Credits don't earn themselves. If you're looking for action, glory or a fat payday - Will you answer the call?",
-    roles: {
-      'LFG-SWTOR': { emoji: 'SWTOR', roleId: '365936777176682547' }
-    }
-  },
-  'battlefrontClassic': {
-    title: 'Battlefront Classic LFG (2004/2005)',
-    description: 'Looking to squad up in the original Star Wars: Battlefront I & II? Whether you\'re storming the beaches of Kashyyyk or defending the Death Star, join this role to find players for classic online sessions, mods, or LAN-based games (via SWBFSpy, GameRanger, or Steam). The battlefront is never closed—only waiting.',
-    roles: {
-      'LFG-CLASSIC2004': { emoji: 'CLASSIC2004', roleId: '1371895939786080297' },
-      'LFG-CLASSIC2005': { emoji: 'CLASSIC2005', roleId: '1371897792695369778' }
-    }
-  }
-};
-
-// LFG command mappings
-const lfgCommands = {
-  'classic2005squad-up': {
-    roleId: '1371897792695369778', // LFG-CLASSIC2005
-    slashCommand: 'looking4group-classic2005time',
-    message: (user) => `📡 <@${user.id}> sounds the battle horn! The Clone Wars rage on in Battlefront Classic (2005)! <@&1371897792695369778>, assemble your squad—blasters hot, starfighters ready! Will you answer the call? 🔥`
-  },
-  'classic2004squad-up': {
-    roleId: '1371895939786080297', // LFG-CLASSIC2004
-    slashCommand: 'looking4group-classic2004time',
-    message: (user) => `📡 <@${user.id}> ignites the signal flare! The Galactic Civil War erupts in Battlefront Classic (2004)! <@&1371895939786080297>, rally your troops—AT-ATs are marching, and the Rebellion needs you! Who’s ready to fight? 🚀`
-  },
-  'swtorsquad-up': {
-    roleId: '365936777176682547', // LFG-SWTOR
-    slashCommand: 'looking4group-swtortime',
-    message: (user) => `📡 <@${user.id}> calls across the galaxy! The Old Republic needs heroes in SWTOR! <@&365936777176682547>, grab your lightsabers and blasters—Sith or Jedi, the battle awaits! Who’s joining the fight for glory? 🌌`
-  },
-  'vanillasquad-up': {
-    roleId: '1364262718487531581', // LFG-VANILLA
-    slashCommand: 'looking4group-vanillatime',
-    message: (user) => `📡 <@${user.id}> sends out the distress signal! Battlefront 2 (2017) Vanilla servers are heating up! <@&1364262718487531581>, gear up for epic battles—no mods, just pure chaos! Who’s ready to dominate the battlefield? 💥`
-  },
-  'kybersquad-up': {
-    roleId: '1364271161000591430', // LFG-KYBER
-    slashCommand: 'looking4group-kybertime',
-    message: (user) => `📡 <@${user.id}> channels the Force! The Kyber servers in Battlefront 2 (2017) are live! <@&1364271161000591430>, ignite your sabers and ready your blasters—heroes and villains clash tonight! Who’s in for the fight? ⚔️`
-  }
 };
 
 // Supported languages
@@ -299,7 +230,7 @@ async function setupWelcomeReactionRoles() {
     if (!message) {
       message = await channel.send({ embeds: [embed] });
       reactionRoleData[WELCOME_CHANNEL_ID] = { messageId: message.id };
-      fs.writeFileSync(reactionRoleFile, JSON.stringify(reactionRoleData, null, 2), 'utf8');
+      fs.writeFileSync(path.join(__dirname, 'reaction_roles.json'), JSON.stringify(reactionRoleData, null, 2), 'utf8');
     }
 
     for (const roleName of Object.entries(welcomeRoles)) {
@@ -313,91 +244,7 @@ async function setupWelcomeReactionRoles() {
   }
 }
 
-// Setup LFG channel reaction roles
-async function setupLfgReactionRoles() {
-  try {
-    const channel = await client.channels.fetch(LFG_CHANNEL_ID);
-    if (!channel || !channel.isTextBased()) {
-      console.error('LFG channel not found or not text-based');
-      return;
-    }
-
-    const guild = channel.guild;
-    const emojis = await guild.emojis.fetch();
-
-    // Setup each LFG message
-    for (const [messageKey, { title, description, roles }] of Object.entries(lfgRoles)) {
-      const emojiMap = {};
-      for (const [roleName, { emoji: emojiName }] of Object.entries(roles)) {
-        const emoji = emojis.find(e => e.name === emojiName);
-        if (emoji) {
-          emojiMap[roleName] = emoji;
-        } else {
-          console.warn(`Emoji not found for role: ${roleName} in ${messageKey}`);
-        }
-      }
-
-      const embed = new EmbedBuilder()
-        .setColor('#808080') // Grey border color
-        .addFields(
-          {
-            name: title,
-            value: '\u200b', // Non-breaking space to separate title
-            inline: false
-          },
-          {
-            name: '\u200b',
-            value: description,
-            inline: false
-          },
-          {
-            name: '\u200b',
-            value: `**Choose your role:**\n${Object.keys(roles)
-              .map(role => `${emojiMap[role] || '❓'} - ${role}`)
-              .join('\n')}`,
-            inline: false
-          },
-          {
-            name: '\u200b',
-            value: 'React to join the LFG role!',
-            inline: false
-          }
-        );
-
-      let message;
-      const existingMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
-      if (existingMessageId) {
-        try {
-          message = await channel.messages.fetch(existingMessageId);
-          await message.edit({ embeds: [embed] }); // Update existing message
-        } catch (err) {
-          console.warn(`LFG reaction role message (${messageKey}) not found, creating new one:`, err.message);
-        }
-      }
-
-      if (!message) {
-        message = await channel.send({ embeds: [embed] });
-        reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`] = { messageId: message.id };
-        fs.writeFileSync(reactionRoleFile, JSON.stringify(reactionRoleData, null, 2), 'utf8');
-      }
-
-      for (const roleName of Object.keys(roles)) {
-        const emoji = emojiMap[roleName];
-        if (emoji) {
-          try {
-            await message.react(emoji);
-          } catch (err) {
-            console.error(`Failed to add reaction for ${roleName} (${emoji.name}):`, err.message);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error setting up LFG reaction roles:', err.message);
-  }
-}
-
-// Check and notify for bump
+// Check and notify for bump every 2 hours from 18:00
 async function checkAndNotifyBump() {
   try {
     const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
@@ -406,28 +253,28 @@ async function checkAndNotifyBump() {
       return;
     }
 
-    const now = Date.now();
-    const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
-    const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
-    const lastBumperId = bumpData[BUMP_CHANNEL_ID]?.userId;
-    let lastBumperTag = 'someone';
+    const now = new Date();
+    const currentHour = now.getUTCHours() + 2; // Convert to CEST (UTC+2)
+    const currentMinute = now.getUTCMinutes();
+    const startHour = 18; // 18:00 CEST
+    const intervalHours = 2;
 
-    if (lastBumperId) {
-      try {
-        const lastBumper = await client.users.fetch(lastBumperId);
-        lastBumperTag = lastBumper.tag;
-      } catch (err) {
-        console.warn(`Failed to fetch user ${lastBumperId}:`, err.message);
-      }
+    // Calculate the next scheduled time
+    let nextNotificationHour = startHour;
+    while (nextNotificationHour <= currentHour || (nextNotificationHour === currentHour && currentMinute === 0)) {
+      nextNotificationHour += intervalHours;
     }
+    const nextNotificationTime = new Date(now);
+    nextNotificationTime.setUTCHours(nextNotificationHour - 2, 0, 0, 0); // Set to next 18:00, 20:00, etc. in CEST
 
-    if (now - lastBump >= BUMP_COOLDOWN && !notified) {
+    const lastNotified = bumpData[BUMP_CHANNEL_ID]?.notifiedTime || 0;
+    if (now >= nextNotificationTime && lastNotified < nextNotificationTime) {
       const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
       await channel.send(
-        `${userMentions}, the galaxy needs your spark! 🌌 ${lastBumperTag} gave us a /bump last time—now it’s your turn to keep our server shining bright! Use /bump to boost our vibe and bring more friends to the party! 🚀`
+        `${userMentions}, the galaxy needs your spark! 🌌 It’s time to keep our server shining bright! Use /bump to boost our vibe and bring more friends to the party! 🚀`
       );
-      console.log(`Sent bump notification at ${new Date(now).toISOString()} for last bumper: ${lastBumperTag}`);
-      bumpData[BUMP_CHANNEL_ID] = { ...bumpData[BUMP_CHANNEL_ID], notified: true };
+      console.log(`Sent bump notification at ${now.toISOString()} for users: ${userMentions}`);
+      bumpData[BUMP_CHANNEL_ID] = { notifiedTime: now.getTime() };
       fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
     }
   } catch (err) {
@@ -439,8 +286,7 @@ client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
   await setupWelcomeReactionRoles();
-  await setupLfgReactionRoles();
-  setInterval(checkAndNotifyBump, 10 * 60 * 1000);
+  setInterval(checkAndNotifyBump, 60 * 1000); // Check every minute
   await checkAndNotifyBump();
 });
 
@@ -448,44 +294,6 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
-
-  // Handle LFG squad-up commands
-  if (message.channel.id === '1364277004198875278' && content.startsWith('!')) {
-    const command = content.slice(1); // Remove the '!' prefix
-    const lfgCommand = Object.keys(lfgCommands).find(cmd => cmd === command);
-
-    if (lfgCommand) {
-      try {
-        const guild = message.guild;
-        const member = await guild.members.fetch(message.author.id);
-        const roleId = lfgCommands[lfgCommand].roleId;
-        const userId = message.author.id;
-        const now = Date.now();
-
-        // Check cooldown
-        if (cooldowns[userId] && (now - cooldowns[userId]) < COOLDOWN_DURATION) {
-          const timeLeft = Math.ceil((COOLDOWN_DURATION - (now - cooldowns[userId])) / 60000);
-          await message.reply(`⏳ You're on cooldown! Please wait ${timeLeft} minute(s) before using this command again.`);
-          return;
-        }
-
-        if (!member.roles.cache.has(roleId)) {
-          await message.reply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
-          return;
-        }
-
-        const callToArms = lfgCommands[lfgCommand].message(message.author.id);
-        await message.channel.send(callToArms);
-        cooldowns[userId] = now;
-        fs.writeFileSync(cooldownFile, JSON.stringify(cooldowns, null, 2), 'utf8');
-        console.log(`LFG command ${command} executed by ${message.author.tag}, role ID: ${roleId}`);
-      } catch (err) {
-        console.error(`Error handling LFG command ${command}:`, err.message);
-        await message.reply('❌ An error occurred while processing your request.');
-      }
-      return;
-    }
-  }
 
   if (
     message.channel.id === BUMP_CHANNEL_ID &&
@@ -495,7 +303,7 @@ client.on('messageCreate', async (message) => {
     bumpData[BUMP_CHANNEL_ID] = {
       timestamp: Date.now(),
       userId: message.author.id,
-      notified: false
+      notifiedTime: 0 // Reset notified time on manual bump
     };
     fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
     console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
@@ -590,43 +398,6 @@ client.on('interactionCreate', async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
       console.log(`Processing command: ${interaction.commandName}`);
-
-      // Handle LFG slash commands
-      const lfgCommandEntry = Object.values(lfgCommands).find(
-        cmd => cmd.slashCommand === interaction.commandName
-      );
-      if (lfgCommandEntry && interaction.channel.id === '1364277004198875278') {
-        await interaction.deferReply();
-        try {
-          const guild = interaction.guild;
-          const member = await guild.members.fetch(interaction.user.id);
-          const roleId = lfgCommandEntry.roleId;
-          const userId = interaction.user.id;
-          const now = Date.now();
-
-          // Check cooldown
-          if (cooldowns[userId] && (now - cooldowns[userId]) < COOLDOWN_DURATION) {
-            const timeLeft = Math.ceil((COOLDOWN_DURATION - (now - cooldowns[userId])) / 60000);
-            await interaction.editReply(`⏳ You're on cooldown! Please wait ${timeLeft} minute(s) before using this command again.`);
-            return;
-          }
-
-          if (!member.roles.cache.has(roleId)) {
-            await interaction.editReply(`❌ You need the <@&${roleId}> role to use this command! Join the role in <#${LFG_CHANNEL_ID}>.`);
-            return;
-          }
-
-          const callToArms = lfgCommandEntry.message(interaction.user.id);
-          await interaction.editReply(callToArms);
-          cooldowns[userId] = now;
-          fs.writeFileSync(cooldownFile, JSON.stringify(cooldowns, null, 2), 'utf8');
-          console.log(`LFG slash command ${interaction.commandName} executed by ${interaction.user.tag}, role ID: ${roleId}`);
-        } catch (err) {
-          console.error(`Error handling LFG slash command ${interaction.commandName}:`, err.message);
-          await interaction.editReply('❌ An error occurred while processing your request.');
-        }
-        return;
-      }
 
       if (interaction.commandName === 'setlanguage') {
         await interaction.deferReply();
@@ -787,44 +558,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
     }
     return;
   }
-
-  // Handle LFG channel reactions
-  if (channelId === LFG_CHANNEL_ID) {
-    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
-      const lfgMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
-      if (messageId !== lfgMessageId) continue;
-
-      try {
-        const guild = reaction.message.guild;
-        const member = await guild.members.fetch(user.id);
-        const emoji = reaction.emoji;
-        const emojiName = emoji.name || (emoji.id ? await guild.emojis.fetch(emoji.id).then(e => e.name) : null);
-
-        console.log(`Reaction added: user=${user.tag}, channel=${channelId}, message=${messageId}, emojiName=${emojiName}, messageKey=${messageKey}`);
-
-        const roleEntry = Object.entries(roles).find(
-          ([_, { emoji: roleEmoji }]) => roleEmoji === emojiName
-        );
-
-        if (roleEntry) {
-          const roleName = roleEntry[0];
-          const roleId = roleEntry[1].roleId;
-          const role = guild.roles.cache.get(roleId);
-          if (role) {
-            await member.roles.add(role);
-            console.log(`Assigned role ${roleName} (ID: ${roleId}) to ${user.tag} in LFG channel (${messageKey})`);
-          } else {
-            console.warn(`Role not found: ${roleId} in LFG channel (${messageKey})`);
-          }
-        } else {
-          console.warn(`No matching role found for emoji ${emojiName} in message ${messageKey}`);
-        }
-      } catch (err) {
-        console.error(`Error adding reaction role in LFG channel (${messageKey}):`, err.message);
-      }
-      break;
-    }
-  }
 });
 
 // Handle reaction role remove
@@ -859,38 +592,6 @@ client.on('messageReactionRemove', async (reaction, user) => {
       console.error('Error removing reaction role in Welcome channel:', err.message);
     }
     return;
-  }
-
-  // Handle LFG channel reactions
-  if (channelId === LFG_CHANNEL_ID) {
-    for (const [messageKey, { roles }] of Object.entries(lfgRoles)) {
-      const lfgMessageId = reactionRoleData[`${LFG_CHANNEL_ID}_${messageKey}`]?.messageId;
-      if (messageId !== lfgMessageId) continue;
-
-      try {
-        const guild = reaction.message.guild;
-        const member = await guild.members.fetch(user.id);
-        const emojiName = reaction.emoji.name;
-
-        const roleEntry = Object.entries(roles).find(
-          ([_, { emoji }]) => emoji === emojiName
-        );
-
-        if (roleEntry) {
-          const roleId = roleEntry[1].roleId;
-          const role = guild.roles.cache.get(roleId);
-          if (role) {
-            await member.roles.remove(role);
-            console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag} in LFG channel (${messageKey})`);
-          } else {
-            console.warn(`Role not found: ${roleId} in LFG channel (${messageKey})`);
-          }
-        }
-      } catch (err) {
-        console.error(`Error removing reaction role in LFG channel (${messageKey}):`, err.message);
-      }
-      break;
-    }
   }
 });
 

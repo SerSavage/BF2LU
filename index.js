@@ -37,6 +37,7 @@ const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translatio
 const CLIENT_ID = process.env.CLIENT_ID;
 const BUMP_CHANNEL_ID = '1361848627789828148';
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
+const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
 // Supported languages
 const supportedLanguages = [
@@ -122,8 +123,8 @@ async function registerCommands() {
   }
 }
 
-// Check and send /bump
-async function checkAndBump() {
+// Check and notify for bump
+async function checkAndNotifyBump() {
   try {
     const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) {
@@ -134,13 +135,14 @@ async function checkAndBump() {
     const now = Date.now();
     const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
     if (now - lastBump >= BUMP_COOLDOWN) {
-      await channel.send('/bump');
-      console.log('Sent /bump command');
-      bumpData[BUMP_CHANNEL_ID] = { timestamp: now };
-      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+      const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
+      await channel.send(
+        `${userMentions}, it’s time to shine! Let’s keep our community buzzing—give the server a /bump to boost our visibility! 🚀 Your energy makes all the difference!`
+      );
+      console.log('Sent bump notification');
     }
   } catch (err) {
-    console.error('Error in checkAndBump:', err);
+    console.error('Error in checkAndNotifyBump:', err);
   }
 }
 
@@ -148,8 +150,8 @@ client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
   // Start periodic bump check
-  setInterval(checkAndBump, 10 * 60 * 1000); // Every 10 minutes
-  await checkAndBump(); // Initial check
+  setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
+  await checkAndNotifyBump(); // Initial check
 });
 
 client.on('messageCreate', async (message) => {
@@ -157,11 +159,18 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
-  // Track /bump commands
-  if (message.channel.id === BUMP_CHANNEL_ID && content === '/bump') {
-    bumpData[BUMP_CHANNEL_ID] = { timestamp: Date.now() };
+  // Track /bump commands from specific users
+  if (
+    message.channel.id === BUMP_CHANNEL_ID &&
+    content === '/bump' &&
+    BUMP_USER_IDS.includes(message.author.id)
+  ) {
+    bumpData[BUMP_CHANNEL_ID] = {
+      timestamp: Date.now(),
+      userId: message.author.id
+    };
     fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
-    console.log('Detected /bump in channel, updated timestamp');
+    console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
   }
 
   // Check for extreme content
@@ -230,7 +239,7 @@ client.on('messageCreate', async (message) => {
   // Set language command
   if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
-    const lang = parts[1].toLowerCase();
+    const lang = parts[1]?.toLowerCase();
 
     if (!supportedLanguages.includes(lang)) {
       return message.reply('❗ Invalid language code. Allowed: ' + supportedLanguages.join(', '));

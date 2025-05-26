@@ -285,8 +285,10 @@ client.on('messageCreate', async (message) => {
         console.error("Audio file missing at:", filePath);
       }
     }
+  }
+
   // Set language command
-    if (message.content.startsWith('!setlang ')) {
+  if (message.content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
     const lang = parts[1]?.toLowerCase();
 

@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -25,19 +25,47 @@ try {
   fs.writeFileSync(bumpDataFile, '{}', 'utf8');
 }
 
+// Initialize reaction role message data
+let reactionRoleData = {};
+const reactionRoleFile = path.join(__dirname, 'reaction_roles.json');
+try {
+  const reactionRoleRaw = fs.readFileSync(reactionRoleFile, 'utf8');
+  reactionRoleData = JSON.parse(reactionRoleRaw);
+} catch (err) {
+  console.warn('reaction_roles.json not found or invalid, starting with empty reaction role data:', err.message);
+  fs.writeFileSync(reactionRoleFile, '{}', 'utf8');
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildEmojisAndStickers,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
 const CLIENT_ID = process.env.CLIENT_ID;
 const BUMP_CHANNEL_ID = '1361848627789828148';
+const WELCOME_CHANNEL_ID = '1361849763611541584';
 const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
 const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
+
+// Welcome channel reaction roles
+const welcomeRoles = {
+  'Guardian': { emoji: 'guardian_emoji', roleId: '1362488297510797443' },
+  'Consular': { emoji: 'consular_emoji', roleId: '1362488420299047024' },
+  'Marauder': { emoji: 'marauder_emoji', roleId: '1362488467757465981' },
+  'Sentinel': { emoji: 'sentinel_emoji', roleId: '1362488521671311601' },
+  'Mandalorian': { emoji: 'mandalorian_emoji', roleId: '1362488684469026976' },
+  'Balanced': { emoji: 'balanced_emoji', roleId: '1362488725111705650' },
+  'Grey Warden': { emoji: 'greywarden_emoji', roleId: '1362489042821972219' },
+  'Inquisitor': { emoji: 'inquisitor_emoji', roleId: '1362490015648579845' },
+  'Sorcerer': { emoji: 'sorcerer_emoji', roleId: '1362490083017625640' }
+};
 
 // Supported languages
 const supportedLanguages = [
@@ -123,6 +151,98 @@ async function registerCommands() {
   }
 }
 
+// Create custom emojis for reaction roles
+async function createCustomEmojis(guild, roles) {
+  try {
+    const existingEmojis = await guild.emojis.fetch();
+    for (const [roleName, { emoji: emojiName }] of Object.entries(roles)) {
+      if (!existingEmojis.some(emoji => emoji.name === emojiName)) {
+        const emojiPath = path.join(__dirname, 'media', `${roleName.replace(/ /g, '')}.png`);
+        if (fs.existsSync(emojiPath)) {
+          const emojiData = fs.readFileSync(emojiPath);
+          const stats = fs.statSync(emojiPath);
+          if (stats.size > 256 * 1024) {
+            console.warn(`Emoji file too large: ${emojiPath} (${stats.size} bytes, max 256KB)`);
+            continue;
+          }
+          await guild.emojis.create({
+            attachment: emojiData,
+            name: emojiName
+          });
+          console.log(`Created emoji: ${emojiName}`);
+        } else {
+          console.warn(`Emoji file not found: ${emojiPath}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error creating custom emojis:', err.message);
+  }
+}
+
+// Setup welcome channel reaction roles
+async function setupWelcomeReactionRoles() {
+  try {
+    const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
+    if (!channel || !channel.isTextBased()) {
+      console.error('Welcome channel not found or not text-based');
+      return;
+    }
+
+    const guild = channel.guild;
+    await createCustomEmojis(guild, welcomeRoles);
+
+    const emojis = await guild.emojis.fetch();
+    const emojiMap = {};
+    for (const [roleName, { emoji: emojiName }] of Object.entries(welcomeRoles)) {
+      const emoji = emojis.find(e => e.name === emojiName);
+      if (emoji) {
+        emojiMap[roleName] = emoji;
+      } else {
+        console.warn(`Emoji not found for role: ${roleName}`);
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('The strongest stars have hearts of kyber.')
+      .setDescription(
+        'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n' +
+        'Now it’s your turn.\n\n' +
+        '**Choose your path:**\n' +
+        Object.keys(welcomeRoles)
+          .map(role => `${emojiMap[role] || '❓'} - ${role}`)
+          .join('\n')
+      )
+      .setColor('#00B7EB')
+      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' });
+
+    let message;
+    const existingMessageId = reactionRoleData[WELCOME_CHANNEL_ID]?.messageId;
+    if (existingMessageId) {
+      try {
+        message = await channel.messages.fetch(existingMessageId);
+      } catch (err) {
+        console.warn('Welcome reaction role message not found, creating new one:', err.message);
+      }
+    }
+
+    if (!message) {
+      message = await channel.send({ embeds: [embed] });
+      reactionRoleData[WELCOME_CHANNEL_ID] = { messageId: message.id };
+      fs.writeFileSync(path.join(__dirname, 'reaction_roles.json'), JSON.stringify(reactionRoleData, null, 2), 'utf8');
+    }
+
+    for (const [roleName] of Object.entries(welcomeRoles)) {
+      const emoji = emojiMap[roleName];
+      if (emoji) {
+        await message.react(emoji);
+      }
+    }
+  } catch (err) {
+    console.error('Error setting up welcome reaction roles:', err.message);
+  }
+}
+
 // Check and notify for bump
 async function checkAndNotifyBump() {
   try {
@@ -153,7 +273,7 @@ async function checkAndNotifyBump() {
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
-  // Start periodic bump check
+  await setupWelcomeReactionRoles();
   setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
   await checkAndNotifyBump(); // Initial check
 });
@@ -369,6 +489,86 @@ client.on('interactionCreate', async interaction => {
       });
       await interaction.editReply('❌ Error translating message. Please try again later.');
     }
+  }
+});
+
+// Handle reaction role add
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+
+  const channelId = reaction.message.channel.id;
+  const messageId = reaction.message.id;
+
+  // Handle Welcome channel reactions
+  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
+    try {
+      const guild = reaction.message.guild;
+      const member = await guild.members.fetch(user.id);
+      const emojiName = reaction.emoji.name;
+
+      const roleEntry = Object.entries(welcomeRoles).find(
+        ([_, { emoji }]) => emoji === emojiName
+      );
+
+      if (roleEntry) {
+        const roleId = roleEntry[1].roleId;
+        const role = guild.roles.cache.get(roleId);
+
+        // Remove all existing welcome roles before adding the new one
+        for (const [, { roleId: existingRoleId }] of Object.entries(welcomeRoles)) {
+          const existingRole = guild.roles.cache.get(existingRoleId);
+          if (existingRole && member.roles.cache.has(existingRoleId) && existingRoleId !== roleId) {
+            await member.roles.remove(existingRole);
+            console.log(`Removed role ${existingRole.name} (ID: ${existingRoleId}) from ${user.tag} in Welcome channel`);
+          }
+        }
+
+        if (role) {
+          await member.roles.add(role);
+          console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in Welcome channel`);
+        } else {
+          console.warn(`Role not found: ${roleId} in Welcome channel`);
+        }
+      }
+    } catch (err) {
+      console.error('Error adding reaction role in Welcome channel:', err.message);
+    }
+    return;
+  }
+});
+
+// Handle reaction role remove
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (user.bot) return;
+
+  const channelId = reaction.message.channel.id;
+  const messageId = reaction.message.id;
+
+  // Handle Welcome channel reactions
+  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
+    try {
+      const guild = reaction.message.guild;
+      const member = await guild.members.fetch(user.id);
+      const emojiName = reaction.emoji.name;
+
+      const roleEntry = Object.entries(welcomeRoles).find(
+        ([_, { emoji }]) => emoji === emojiName
+      );
+
+      if (roleEntry) {
+        const roleId = roleEntry[1].roleId;
+        const role = guild.roles.cache.get(roleId);
+        if (role) {
+          await member.roles.remove(role);
+          console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag} in Welcome channel`);
+        } else {
+          console.warn(`Role not found: ${roleId} in Welcome channel`);
+        }
+      }
+    } catch (err) {
+      console.error('Error removing reaction role in Welcome channel:', err.message);
+    }
+    return;
   }
 });
 

@@ -215,7 +215,7 @@ async function setupWelcomeReactionRoles() {
           .join('\n')
       )
       .setColor('#00B7EB')
-      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!') });
+      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' });
 
     let message;
     const existingMessageId = reactionRoleData[WELCOME_CHANNEL_ID]?.messageId;
@@ -233,8 +233,8 @@ async function setupWelcomeReactionRoles() {
       fs.writeFileSync(path.join(__dirname, 'reaction_roles.json'), JSON.stringify(reactionRoleData, null, 2), 'utf8');
     }
 
-    for (const roleName of Object.entries(welcomeRoles)) {
-      const emoji = emojiMap[roleName[1].emoji];
+    for (const [roleName] of Object.entries(welcomeRoles)) {
+      const emoji = emojiMap[roleName];
       if (emoji) {
         await message.react(emoji);
       }
@@ -268,7 +268,7 @@ async function checkAndNotifyBump() {
     nextNotificationTime.setUTCHours(nextNotificationHour - 2, 0, 0, 0); // Set to next 18:00, 20:00, etc. in CEST
 
     const lastNotified = bumpData[BUMP_CHANNEL_ID]?.notifiedTime || 0;
-    if (now >= nextNotificationTime && lastNotified < nextNotificationTime) {
+    if (now >= nextNotificationTime && lastNotified < nextNotificationTime.getTime()) {
       const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
       await channel.send(
         `${userMentions}, the galaxy needs your spark! 🌌 It’s time to keep our server shining bright! Use /bump to boost our vibe and bring more friends to the party! 🚀`

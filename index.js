@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -14,44 +14,30 @@ try {
   fs.writeFileSync(path.join(__dirname, 'users.json'), '{}', 'utf8');
 }
 
-// Initialize reaction role message data
-let reactionRoleData = {};
-const reactionRoleFile = path.join(__dirname, 'reaction_roles.json');
+// Initialize bump data
+let bumpData = {};
+const bumpDataFile = path.join(__dirname, 'bump.json');
 try {
-  const reactionRoleRaw = fs.readFileSync(reactionRoleFile, 'utf8');
-  reactionRoleData = JSON.parse(reactionRoleRaw);
+  const bumpDataRaw = fs.readFileSync(bumpDataFile, 'utf8');
+  bumpData = JSON.parse(bumpDataRaw);
 } catch (err) {
-  console.warn('reaction_roles.json not found or invalid, starting with empty reaction role data:', err.message);
-  fs.writeFileSync(reactionRoleFile, '{}', 'utf8');
+  console.warn('bump.json not found or invalid, starting with empty bump data:', err.message);
+  fs.writeFileSync(bumpDataFile, '{}', 'utf8');
 }
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildEmojisAndStickers,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
 const CLIENT_ID = process.env.CLIENT_ID;
-const WELCOME_CHANNEL_ID = '1361849763611541584';
-
-// Welcome channel reaction roles
-const welcomeRoles = {
-  'Guardian': { emoji: 'guardian_emoji', roleId: '1362488297510797443' },
-  'Consular': { emoji: 'consular_emoji', roleId: '1362488420299047024' },
-  'Marauder': { emoji: 'marauder_emoji', roleId: '1362488467757465981' },
-  'Sentinel': { emoji: 'sentinel_emoji', roleId: '1362488521671311601' },
-  'Mandalorian': { emoji: 'mandalorian_emoji', roleId: '1362488684469026976' },
-  'Balanced': { emoji: 'balanced_emoji', roleId: '1362488725111705650' },
-  'Grey Warden': { emoji: 'greywarden_emoji', roleId: '1362489042821972219' },
-  'Inquisitor': { emoji: 'inquisitor_emoji', roleId: '1362490015648579845' },
-  'Sorcerer': { emoji: 'sorcerer_emoji', roleId: '1362490083017625640' }
-};
+const BUMP_CHANNEL_ID = '1361848627789828148';
+const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
+const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
 // Supported languages
 const supportedLanguages = [
@@ -109,26 +95,7 @@ const extremeTriggers = [
 ];
 
 // Register slash commands
-const commands = [
-  {
-    name: 'setlanguage',
-    description: 'Set your preferred translation language',
-    options: [
-      {
-        name: 'language',
-        description: 'The language code (e.g., en, es, fr)',
-        type: 3, // String
-        required: true
-      }
-    ]
-  },
-  {
-    name: 'translate_message',
-    type: 3, // Message context menu command
-    description: 'Translate a message to your preferred language'
-  }
-];
-
+const commands = require('./commands.json');
 const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
 
 async function registerCommands() {
@@ -156,113 +123,60 @@ async function registerCommands() {
   }
 }
 
-// Create custom emojis for reaction roles
-async function createCustomEmojis(guild, roles) {
+// Check and notify for bump
+async function checkAndNotifyBump() {
   try {
-    const existingEmojis = await guild.emojis.fetch();
-    for (const [roleName, { emoji: emojiName }] of Object.entries(roles)) {
-      if (!existingEmojis.some(emoji => emoji.name === emojiName)) {
-        const emojiPath = path.join(__dirname, 'media', `${roleName.replace(/ /g, '')}.png`);
-        if (fs.existsSync(emojiPath)) {
-          const emojiData = fs.readFileSync(emojiPath);
-          const stats = fs.statSync(emojiPath);
-          if (stats.size > 256 * 1024) {
-            console.warn(`Emoji file too large: ${emojiPath} (${stats.size} bytes, max 256KB)`);
-            continue;
-          }
-          await guild.emojis.create({
-            attachment: emojiData,
-            name: emojiName
-          });
-          console.log(`Created emoji: ${emojiName}`);
-        } else {
-          console.warn(`Emoji file not found: ${emojiPath}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error creating custom emojis:', err.message);
-  }
-}
-
-// Setup welcome channel reaction roles
-async function setupWelcomeReactionRoles() {
-  try {
-    const channel = await client.channels.fetch(WELCOME_CHANNEL_ID);
+    const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) {
-      console.error('Welcome channel not found or not text-based');
+      console.error('Bump channel not found or not text-based');
       return;
     }
 
-    const guild = channel.guild;
-    await createCustomEmojis(guild, welcomeRoles);
+    const now = Date.now();
+    const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
+    const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
 
-    const emojis = await guild.emojis.fetch();
-    const emojiMap = {};
-    for (const [roleName, { emoji: emojiName }] of Object.entries(welcomeRoles)) {
-      const emoji = emojis.find(e => e.name === emojiName);
-      if (emoji) {
-        emojiMap[roleName] = emoji;
-      } else {
-        console.warn(`Emoji not found for role: ${roleName}`);
-      }
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle('The strongest stars have hearts of kyber.')
-      .setDescription(
-        'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n' +
-        'Now it’s your turn.\n\n' +
-        '**Choose your path:**\n' +
-        Object.keys(welcomeRoles)
-          .map(role => `${emojiMap[role] || '❓'} - ${role}`)
-          .join('\n')
-      )
-      .setColor('#00B7EB')
-      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' });
-
-    const existingMessageId = reactionRoleData[WELCOME_CHANNEL_ID]?.messageId;
-    let message;
-
-    if (existingMessageId) {
-      try {
-        message = await channel.messages.fetch(existingMessageId);
-        if (message && message.author.id === client.user.id) {
-          console.log('Found existing welcome reaction role message, skipping creation.');
-          return; // Exit if valid message exists
-        }
-        console.warn('Existing message ID found but invalid or not authored by bot, creating new one.');
-      } catch (err) {
-        console.warn('Welcome reaction role message not found, creating new one:', err.message);
-      }
-    }
-
-    // Only create a new message if no valid existing message is found
-    message = await channel.send({ embeds: [embed] });
-    reactionRoleData[WELCOME_CHANNEL_ID] = { messageId: message.id };
-    fs.writeFileSync(path.join(__dirname, 'reaction_roles.json'), JSON.stringify(reactionRoleData, null, 2), 'utf8');
-
-    for (const [roleName] of Object.entries(welcomeRoles)) {
-      const emoji = emojiMap[roleName];
-      if (emoji) {
-        await message.react(emoji);
-      }
+    if (now - lastBump >= BUMP_COOLDOWN && !notified) {
+      const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
+      await channel.send(
+        `${userMentions}, it’s time to shine! Let’s keep our community buzzing—give the server a /bump to boost our visibility! 🚀 Your energy makes all the difference!`
+      );
+      console.log(`Sent bump notification at ${new Date(now).toISOString()}`);
+      bumpData[BUMP_CHANNEL_ID] = { ...bumpData[BUMP_CHANNEL_ID], notified: true };
+      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
     }
   } catch (err) {
-    console.error('Error setting up welcome reaction roles:', err.message);
+    console.error('Error in checkAndNotifyBump:', err);
   }
 }
 
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
-  await setupWelcomeReactionRoles();
+  // Start periodic bump check
+  setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
+  await checkAndNotifyBump(); // Initial check
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
+
+  // Track /bump commands from specific users
+  if (
+    message.channel.id === BUMP_CHANNEL_ID &&
+    content === '/bump' &&
+    BUMP_USER_IDS.includes(message.author.id)
+  ) {
+    bumpData[BUMP_CHANNEL_ID] = {
+      timestamp: Date.now(),
+      userId: message.author.id,
+      notified: false
+    };
+    fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+    console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
+  }
 
   // Check for extreme content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
@@ -345,9 +259,9 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
 
-  try {
-    if (interaction.isChatInputCommand() && interaction.commandName === 'setlanguage') {
-      await interaction.deferReply({ ephemeral: true });
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'setlanguage') {
+      await interaction.deferReply();
       const lang = interaction.options.getString('language').toLowerCase();
 
       if (!supportedLanguages.includes(lang)) {
@@ -360,23 +274,19 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply(`✅ Your preferred translation language is now set to **${lang}**.`);
     }
 
-    if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
-      await interaction.deferReply({ ephemeral: true });
-      const message = interaction.targetMessage;
-      const targetLang = users[interaction.user.id] || 'en';
+    if (interaction.commandName === 'translate') {
+      await interaction.deferReply();
+      const text = interaction.options.getString('text');
+      let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
 
       if (!supportedLanguages.includes(targetLang)) {
         await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
         return;
       }
 
-      if (!message.content) {
-        await interaction.editReply('❗ This message has no translatable content.');
-        return;
-      }
-
       try {
-        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content }, { timeout: 10000 });
+        console.log(`Detecting language for text: ${text}`);
+        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
         const detectedLang = detectRes.data?.[0]?.language || 'unknown';
 
         if (!supportedLanguages.includes(detectedLang)) {
@@ -384,26 +294,18 @@ client.on('interactionCreate', async interaction => {
           return;
         }
 
-        if (detectedLang === targetLang) {
-          await interaction.editReply(`🌍 This message is already in \`${targetLang}\`.`);
-          return;
-        }
-
-        const transRes = await axios.post(
-          `${LIBRETRANSLATE_URL}/translate`,
-          {
-            q: message.content,
-            source: detectedLang,
-            target: targetLang,
-            format: 'text'
-          },
-          { timeout: 10000 }
-        );
+        console.log(`Translating from ${detectedLang} to ${targetLang}`);
+        const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+          q: text,
+          source: detectedLang,
+          target: targetLang,
+          format: 'text'
+        });
 
         const translated = transRes.data.translatedText;
-        await interaction.editReply(
-          `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
-        );
+        await interaction.editReply({
+          content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+        });
       } catch (err) {
         console.error('Translation error details:', {
           message: err.message,
@@ -413,96 +315,60 @@ client.on('interactionCreate', async interaction => {
           } : 'No response',
           request: err.request ? err.request : 'No request'
         });
-        await interaction.editReply('❌ Error translating message. Please try again later.');
+        await interaction.editReply('❌ Error translating text. Please try again later.');
       }
-    }
-  } catch (err) {
-    console.error('Interaction error:', err.message);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '❌ An error occurred. Please try again.', ephemeral: true }).catch(console.error);
-    } else if (interaction.deferred) {
-      await interaction.editReply('❌ An error occurred. Please try again.').catch(console.error);
     }
   }
-});
 
-// Handle reaction role add
-client.on('messageReactionAdd', async (reaction, user) => {
-  if (user.bot) return;
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
+    await interaction.deferReply();
+    const message = interaction.targetMessage;
+    const targetLang = users[interaction.user.id] || 'en';
 
-  const channelId = reaction.message.channel.id;
-  const messageId = reaction.message.id;
-
-  // Handle Welcome channel reactions
-  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
-    try {
-      const guild = reaction.message.guild;
-      const member = await guild.members.fetch(user.id);
-      const emojiName = reaction.emoji.name;
-
-      const roleEntry = Object.entries(welcomeRoles).find(
-        ([_, { emoji }]) => emoji === emojiName
-      );
-
-      if (roleEntry) {
-        const roleId = roleEntry[1].roleId;
-        const role = guild.roles.cache.get(roleId);
-
-        // Remove all existing welcome roles before adding the new one
-        for (const [, { roleId: existingRoleId }] of Object.entries(welcomeRoles)) {
-          const existingRole = guild.roles.cache.get(existingRoleId);
-          if (existingRole && member.roles.cache.has(existingRoleId) && existingRoleId !== roleId) {
-            await member.roles.remove(existingRole);
-            console.log(`Removed role ${existingRole.name} (ID: ${existingRoleId}) from ${user.tag} in Welcome channel`);
-          }
-        }
-
-        if (role) {
-          await member.roles.add(role);
-          console.log(`Assigned role ${roleEntry[0]} (ID: ${roleId}) to ${user.tag} in Welcome channel`);
-        } else {
-          console.warn(`Role not found: ${roleId} in Welcome channel`);
-        }
-      }
-    } catch (err) {
-      console.error('Error adding reaction role in Welcome channel:', err.message);
+    if (!supportedLanguages.includes(targetLang)) {
+      await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
+      return;
     }
-    return;
-  }
-});
 
-// Handle reaction role remove
-client.on('messageReactionRemove', async (reaction, user) => {
-  if (user.bot) return;
-
-  const channelId = reaction.message.channel.id;
-  const messageId = reaction.message.id;
-
-  // Handle Welcome channel reactions
-  if (channelId === WELCOME_CHANNEL_ID && messageId === reactionRoleData[WELCOME_CHANNEL_ID]?.messageId) {
     try {
-      const guild = reaction.message.guild;
-      const member = await guild.members.fetch(user.id);
-      const emojiName = reaction.emoji.name;
+      const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content });
+      const detectedLang = detectRes.data?.[0]?.language || 'unknown';
 
-      const roleEntry = Object.entries(welcomeRoles).find(
-        ([_, { emoji }]) => emoji === emojiName
-      );
-
-      if (roleEntry) {
-        const roleId = roleEntry[1].roleId;
-        const role = guild.roles.cache.get(roleId);
-        if (role) {
-          await member.roles.remove(role);
-          console.log(`Removed role ${roleEntry[0]} (ID: ${roleId}) from ${user.tag} in Welcome channel`);
-        } else {
-          console.warn(`Role not found: ${roleId} in Welcome channel`);
-        }
+      if (!supportedLanguages.includes(detectedLang)) {
+        await interaction.editReply('❗ Detected language not supported: ' + detectedLang);
+        return;
       }
+
+      if (detectedLang === targetLang) {
+        await interaction.editReply({
+          content: `🌍 This message is already in \`${targetLang}\`.`,
+          ephemeral: true
+        });
+        return;
+      }
+
+      const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+        q: message.content,
+        source: detectedLang,
+        target: targetLang,
+        format: 'text'
+      });
+
+      const translated = transRes.data.translatedText;
+      await interaction.editReply({
+        content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+      });
     } catch (err) {
-      console.error('Error removing reaction role in Welcome channel:', err.message);
+      console.error('Translation error details:', {
+        message: err.message,
+        response: err.response ? {
+          status: err.response.status,
+          data: err.response.data
+        } : 'No response',
+        request: err.request ? err.request : 'No request'
+      });
+      await interaction.editReply('❌ Error translating message. Please try again later.');
     }
-    return;
   }
 });
 

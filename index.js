@@ -96,14 +96,8 @@ const extremeTriggers = [
 
 // Register slash commands
 const commands = require('./commands.json');
-const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
 
 async function registerCommands() {
-  if (fs.existsSync(commandsRegisteredFile)) {
-    console.log('Slash commands already registered, skipping...');
-    return;
-  }
-
   if (!CLIENT_ID) {
     console.error('CLIENT_ID environment variable is not set. Cannot register commands.');
     return;
@@ -117,7 +111,6 @@ async function registerCommands() {
       { body: commands }
     );
     console.log('Slash commands registered successfully.');
-    fs.writeFileSync(commandsRegisteredFile, 'registered', 'utf8');
   } catch (error) {
     console.error('Error registering commands:', error);
   }
@@ -320,7 +313,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_with_cringebot') {
     await interaction.deferReply();
     const message = interaction.targetMessage;
     const targetLang = users[interaction.user.id] || 'en';

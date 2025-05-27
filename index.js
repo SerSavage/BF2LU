@@ -14,6 +14,17 @@ try {
   fs.writeFileSync(path.join(__dirname, 'users.json'), '{}', 'utf8');
 }
 
+// Initialize bump data
+let bumpData = {};
+const bumpDataFile = path.join(__dirname, 'bump.json');
+try {
+  const bumpDataRaw = fs.readFileSync(bumpDataFile, 'utf8');
+  bumpData = JSON.parse(bumpDataRaw);
+} catch (err) {
+  console.warn('bump.json not found or invalid, starting with empty bump data:', err.message);
+  fs.writeFileSync(bumpDataFile, '{}', 'utf8');
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -24,6 +35,9 @@ const client = new Client({
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
 const CLIENT_ID = process.env.CLIENT_ID;
+const BUMP_CHANNEL_ID = '1361848627789828148';
+const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
+const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
 // Supported languages
 const supportedLanguages = [
@@ -109,15 +123,60 @@ async function registerCommands() {
   }
 }
 
+// Check and notify for bump
+async function checkAndNotifyBump() {
+  try {
+    const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
+    if (!channel || !channel.isTextBased()) {
+      console.error('Bump channel not found or not text-based');
+      return;
+    }
+
+    const now = Date.now();
+    const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
+    const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
+
+    if (now - lastBump >= BUMP_COOLDOWN && !notified) {
+      const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
+      await channel.send(
+        `${userMentions}, it’s time to shine! Let’s keep our community buzzing—give the server a /bump to boost our visibility! 🚀 Your energy makes all the difference!`
+      );
+      console.log(`Sent bump notification at ${new Date(now).toISOString()}`);
+      bumpData[BUMP_CHANNEL_ID] = { ...bumpData[BUMP_CHANNEL_ID], notified: true };
+      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+    }
+  } catch (err) {
+    console.error('Error in checkAndNotifyBump:', err);
+  }
+}
+
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
+  // Start periodic bump check
+  setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
+  await checkAndNotifyBump(); // Initial check
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
+
+  // Track /bump commands from specific users
+  if (
+    message.channel.id === BUMP_CHANNEL_ID &&
+    content === '/bump' &&
+    BUMP_USER_IDS.includes(message.author.id)
+  ) {
+    bumpData[BUMP_CHANNEL_ID] = {
+      timestamp: Date.now(),
+      userId: message.author.id,
+      notified: false
+    };
+    fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
+    console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
+  }
 
   // Check for extreme content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
@@ -198,12 +257,73 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
 
-  if (interaction.commandName === 'translate') {
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'setlanguage') {
+      await interaction.deferReply();
+      const lang = interaction.options.getString('language').toLowerCase();
+
+      if (!supportedLanguages.includes(lang)) {
+        await interaction.editReply('❗ Invalid language code. Allowed: ' + supportedLanguages.join(', '));
+        return;
+      }
+
+      users[interaction.user.id] = lang;
+      fs.writeFileSync(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2), 'utf8');
+      await interaction.editReply(`✅ Your preferred translation language is now set to **${lang}**.`);
+    }
+
+    if (interaction.commandName === 'translate') {
+      await interaction.deferReply();
+      const text = interaction.options.getString('text');
+      let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
+
+      if (!supportedLanguages.includes(targetLang)) {
+        await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
+        return;
+      }
+
+      try {
+        console.log(`Detecting language for text: ${text}`);
+        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
+        const detectedLang = detectRes.data?.[0]?.language || 'unknown';
+
+        if (!supportedLanguages.includes(detectedLang)) {
+          await interaction.editReply('❗ Detected language not supported: ' + detectedLang);
+          return;
+        }
+
+        console.log(`Translating from ${detectedLang} to ${targetLang}`);
+        const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+          q: text,
+          source: detectedLang,
+          target: targetLang,
+          format: 'text'
+        });
+
+        const translated = transRes.data.translatedText;
+        await interaction.editReply({
+          content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+        });
+      } catch (err) {
+        console.error('Translation error details:', {
+          message: err.message,
+          response: err.response ? {
+            status: err.response.status,
+            data: err.response.data
+          } : 'No response',
+          request: err.request ? err.request : 'No request'
+        });
+        await interaction.editReply('❌ Error translating text. Please try again later.');
+      }
+    }
+  }
+
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
     await interaction.deferReply();
-    const text = interaction.options.getString('text');
-    let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
+    const message = interaction.targetMessage;
+    const targetLang = users[interaction.user.id] || 'en';
 
     if (!supportedLanguages.includes(targetLang)) {
       await interaction.editReply('❗ Invalid target language code. Allowed: ' + supportedLanguages.join(', '));
@@ -211,8 +331,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     try {
-      console.log(`Detecting language for text: ${text}`);
-      const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
+      const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content });
       const detectedLang = detectRes.data?.[0]?.language || 'unknown';
 
       if (!supportedLanguages.includes(detectedLang)) {
@@ -220,9 +339,16 @@ client.on('interactionCreate', async interaction => {
         return;
       }
 
-      console.log(`Translating from ${detectedLang} to ${targetLang}`);
+      if (detectedLang === targetLang) {
+        await interaction.editReply({
+          content: `🌍 This message is already in \`${targetLang}\`.`,
+          ephemeral: true
+        });
+        return;
+      }
+
       const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
-        q: text,
+        q: message.content,
         source: detectedLang,
         target: targetLang,
         format: 'text'
@@ -241,7 +367,7 @@ client.on('interactionCreate', async interaction => {
         } : 'No response',
         request: err.request ? err.request : 'No request'
       });
-      await interaction.editReply('❌ Error translating text. Please try again later.');
+      await interaction.editReply('❌ Error translating message. Please try again later.');
     }
   }
 });

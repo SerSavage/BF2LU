@@ -14,17 +14,6 @@ try {
   fs.writeFileSync(path.join(__dirname, 'users.json'), '{}', 'utf8');
 }
 
-// Initialize bump data
-let bumpData = {};
-const bumpDataFile = path.join(__dirname, 'bump.json');
-try {
-  const bumpDataRaw = fs.readFileSync(bumpDataFile, 'utf8');
-  bumpData = JSON.parse(bumpDataRaw);
-} catch (err) {
-  console.warn('bump.json not found or invalid, starting with empty bump data:', err.message);
-  fs.writeFileSync(bumpDataFile, '{}', 'utf8');
-}
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -35,9 +24,6 @@ const client = new Client({
 
 const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translationlib.onrender.com';
 const CLIENT_ID = process.env.CLIENT_ID;
-const BUMP_CHANNEL_ID = '1361848627789828148';
-const BUMP_COOLDOWN = 2 * 60 * 60 * 1000; // 2 hours in ms
-const BUMP_USER_IDS = ['275603696036085760', '1128811453026156594'];
 
 // Supported languages
 const supportedLanguages = [
@@ -96,8 +82,14 @@ const extremeTriggers = [
 
 // Register slash commands
 const commands = require('./commands.json');
+const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
 
 async function registerCommands() {
+  if (fs.existsSync(commandsRegisteredFile)) {
+    console.log('Slash commands already registered, skipping...');
+    return;
+  }
+
   if (!CLIENT_ID) {
     console.error('CLIENT_ID environment variable is not set. Cannot register commands.');
     return;
@@ -111,65 +103,21 @@ async function registerCommands() {
       { body: commands }
     );
     console.log('Slash commands registered successfully.');
+    fs.writeFileSync(commandsRegisteredFile, 'registered', 'utf8');
   } catch (error) {
     console.error('Error registering commands:', error);
-  }
-}
-
-// Check and notify for bump
-async function checkAndNotifyBump() {
-  try {
-    const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
-    if (!channel || !channel.isTextBased()) {
-      console.error('Bump channel not found or not text-based');
-      return;
-    }
-
-    const now = Date.now();
-    const lastBump = bumpData[BUMP_CHANNEL_ID]?.timestamp || 0;
-    const notified = bumpData[BUMP_CHANNEL_ID]?.notified || false;
-
-    if (now - lastBump >= BUMP_COOLDOWN && !notified) {
-      const userMentions = BUMP_USER_IDS.map(id => `<@${id}>`).join(' and ');
-      await channel.send(
-        `${userMentions}, it’s time to shine! Let’s keep our community buzzing—give the server a /bump to boost our visibility! 🚀 Your energy makes all the difference!`
-      );
-      console.log(`Sent bump notification at ${new Date(now).toISOString()}`);
-      bumpData[BUMP_CHANNEL_ID] = { ...bumpData[BUMP_CHANNEL_ID], notified: true };
-      fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
-    }
-  } catch (err) {
-    console.error('Error in checkAndNotifyBump:', err);
   }
 }
 
 client.once('ready', async () => {
   console.log(`Bot logged in as ${client.user.tag}`);
   await registerCommands();
-  // Start periodic bump check
-  setInterval(checkAndNotifyBump, 10 * 60 * 1000); // Every 10 minutes
-  await checkAndNotifyBump(); // Initial check
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
-
-  // Track /bump commands from specific users
-  if (
-    message.channel.id === BUMP_CHANNEL_ID &&
-    content === '/bump' &&
-    BUMP_USER_IDS.includes(message.author.id)
-  ) {
-    bumpData[BUMP_CHANNEL_ID] = {
-      timestamp: Date.now(),
-      userId: message.author.id,
-      notified: false
-    };
-    fs.writeFileSync(bumpDataFile, JSON.stringify(bumpData, null, 2), 'utf8');
-    console.log(`Detected /bump by ${message.author.tag}, updated timestamp`);
-  }
 
   // Check for extreme content
   if (extremeTriggers.some(trigger => content.includes(trigger))) {
@@ -313,7 +261,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_with_cringebot') {
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
     await interaction.deferReply();
     const message = interaction.targetMessage;
     const targetLang = users[interaction.user.id] || 'en';

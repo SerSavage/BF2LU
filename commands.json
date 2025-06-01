@@ -1,0 +1,36 @@
+[
+  {
+    "name": "setlanguage",
+    "description": "Set your preferred translation language",
+    "options": [
+      {
+        "name": "language",
+        "description": "The language code (e.g., en, es, fr)",
+        "type": 3,
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "translate",
+    "description": "Translate text to a specified or preferred language",
+    "options": [
+      {
+        "name": "text",
+        "description": "The text to translate",
+        "type": 3,
+        "required": true
+      },
+      {
+        "name": "language",
+        "description": "The target language code (optional)",
+        "type": 3,
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "translate_message",
+    "type": 3
+  }
+]

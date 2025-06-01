@@ -1,0 +1,62 @@
+services:
+  - type: worker
+    name: unboundcore
+    env: node
+    repo: https://github.com/SerSavage/BF2LU
+    branch: main
+    buildCommand: npm install
+    startCommand: node index.js
+    plan: free
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GUILD_ID
+        value: 1361838672265089225
+      - key: WELCOME_CHANNEL_ID
+        value: 1361849763611541584
+      - key: BUMP_CHANNEL_ID
+        value: 1361848627789828148
+      - key: MOD_CHANNEL_ID
+        value: 1362988156546449598
+      - key: CLIENT_ID
+        value: 1372266378651766864
+      - key: LIBRETRANSLATE_URL
+        value: https://translationlib.onrender.com
+      - key: REACTION_ROLE_MESSAGE_ID
+        value: 1378491885299175576
+      - key: GUARDIAN_EMOJI_ID
+        value: 1376547323925227650
+      - key: CONSULAR_EMOJI_ID
+        value: 1376544025380655185
+      - key: MARAUDER_EMOJI_ID
+        value: 1376544027058634752
+      - key: SENTINEL_EMOJI_ID
+        value: 1376544028421787688
+      - key: MANDALORIAN_EMOJI_ID
+        value: 1376544029977739264
+      - key: BALANCED_EMOJI_ID
+        value: 1376544031076647036
+      - key: INQUISITOR_EMOJI_ID
+        value: 1376544032947306584
+      - key: SORCERER_EMOJI_ID
+        value: 1376544034184499212
+      - key: GREYWARDEN_EMOJI_ID
+        value: 1376547749817749605
+      - key: GUARDIAN_ROLEID
+        value: 1362488297510797443
+      - key: CONSULAR_ROLEID
+        value: 1362488420299047024
+      - key: MARAUDER_ROLEID
+        value: 1362488467757465981
+      - key: SENTINEL_ROLEID
+        value: 1362488521671311601
+      - key: MANDALORIAN_ROLEID
+        value: 1362488684469026976
+      - key: BALANCED_ROLEID
+        value: 1362488725111705650
+      - key: INQUISITOR_ROLEID
+        value: 1362490015648579845
+      - key: SORCERER_ROLEID
+        value: 1362490083017625640
+      - key: GREYWARDEN_ROLEID
+        value: 1362489042821972219

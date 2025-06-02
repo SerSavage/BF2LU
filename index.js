@@ -375,7 +375,7 @@ async function sendDiscordNotification(mods, channelId) {
   .setTimestamp();
 
 if (mod.image) {
-  embed.setThumbnail(mod.image);
+  embed.setImage(mod.image);
 }
 
     try {

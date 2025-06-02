@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "prestart": "npx puppeteer browsers install chrome",
+    "prestart": "npx puppeteer browsers install chrome --verbose > chrome-install.log 2>&1 || (cat chrome-install.log && exit 1)",
     "start": "node index.js"
   },
   "dependencies": {

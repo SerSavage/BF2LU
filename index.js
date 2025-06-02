@@ -347,8 +347,16 @@ async function fetchPersonalModsFromAPI() {
         return false;
       }
 
-      if (!mod.user || mod.user.user_id !== parseInt(NEXUS_AUTHOR_ID)) {
-        console.log(`[SKIP] ${mod.name || 'Unnamed'} is not authored by user ${NEXUS_AUTHOR_ID}`);
+      // Bypass author check for mod_id 11814
+      if (mod.mod_id === 11814) {
+        console.log(`✅ Including mod_id 11814 (BF Poofies)`);
+        return true;
+      }
+
+      // Check author using member_id
+      const authorId = mod.user?.member_id || mod.user?.user_id;
+      if (!authorId || authorId !== parseInt(NEXUS_AUTHOR_ID)) {
+        console.log(`[SKIP] ${mod.name || 'Unnamed'} is not authored by user ${NEXUS_AUTHOR_ID} (found ${authorId})`);
         return false;
       }
 

@@ -1,13 +1,32 @@
-const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes, EmbedBuilder, WebhookClient } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
 const express = require('express');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 require('dotenv').config();
+
+// Add stealth plugin for puppeteer
+puppeteer.use(StealthPlugin());
 
 const dataDir = '/app/data';
 if (!require('fs').existsSync(dataDir)) {
   require('fs').mkdirSync(dataDir, { recursive: true });
+}
+
+// Initialize cache files if missing
+if (!require('fs').existsSync(path.join(dataDir, 'mods.json'))) {
+  require('fs').writeFileSync(path.join(dataDir, 'mods.json'), JSON.stringify([], null, 2));
+  console.log('Created mods.json');
+}
+if (!require('fs').existsSync(path.join(dataDir, 'personal_mods.json'))) {
+  require('fs').writeFileSync(path.join(dataDir, 'personal_mods.json'), JSON.stringify({ mods: [], lastResetDate: new Date().toISOString() }, null, 2));
+  console.log('Created personal_mods.json');
+}
+if (!require('fs').existsSync(path.join(dataDir, 'lastest.json'))) {
+  require('fs').writeFileSync(path.join(dataDir, 'lastest.json'), JSON.stringify({ categories: {}, lastResetDate: new Date().toISOString() }, null, 2));
+  console.log('Created lastest.json');
 }
 
 const app = express();
@@ -30,6 +49,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers
   ]
 });
+
+// Initialize webhook client
+const webhookClient = process.env.DISCORD_WEBHOOK_URL ? new WebhookClient({ url: process.env.DISCORD_WEBHOOK_URL }) : null;
 
 const commands = require('./commands.json');
 
@@ -132,12 +154,18 @@ if (!NEXUS_AUTHOR_ID) {
   console.error('❌ NEXUS_AUTHOR_ID is not set!');
   process.exit(1);
 }
+if (!process.env.DISCORD_CHANNEL_ID) {
+  console.error('❌ DISCORD_CHANNEL_ID is not set!');
+  process.exit(1);
+}
+if (!process.env.DISCORD_WEBHOOK_URL || !webhookClient) {
+  console.error('❌ DISCORD_WEBHOOK_URL is not set or invalid!');
+  process.exit(1);
+}
 
 const cutoff = new Date();
 cutoff.setUTCHours(0, 0, 0, 0);
-// For testing older mods, uncomment:
-// const cutoff = new Date('2020-01-01');
-console.log('📅 Using cutoff date:', cutoff.toISOString());
+console.log('📅 Using cutoff date for mods:', cutoff.toISOString());
 
 const roleMapping = {
   [process.env.GUARDIAN_EMOJI_ID]: process.env.GUARDIAN_ROLEID,
@@ -180,22 +208,67 @@ const triggers = [
 
 const extremeTriggers = [
   'nigger', 'chink', 'gook', 'spic', 'kike', 'sand nigger', 'porch monkey',
-  'slant eye', 'wetback', 'beaner', 'camel jockey', 'raghead', 'towelhead',
+  'slant eye', 'wetback', 'beaner', 'camel jockey', 'raghead',
+  'towelhead',
   'monkey', 'jungle bunny', 'zipperhead', 'yellow peril', 'coon', 'pickaninny',
-  'gas the jews', 'heil hitler', 'sieg heil', 'oven dodger', 'hook nose', 'dirty jew', 'ashkenazi scum',
-  'faggot', 'dyke', 'tranny', 'no homo', 'fudge packer', 'shemale',
-  'drag freak', 'queer', 'retard', 'spastic', 'mongoloid', 'window licker', 'cripple', 'vegetable',
-  'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'make me a sandwich',
-  'women can\'t drive', 'she asked for it', 'rape her', 'kill her',
-  'rape', 'rape you', 'raping', 'kill yourself', 'kms', 'kys',
-  'go hang yourself', 'slit your wrists', 'choke and die',
-  'beat her', 'abuse her', 'molest', 'pedophile', 'pedo', 'groomer',
-  'build the wall', 'go back to your country', 'illegal alien', 'white power',
-  'white pride', 'blood and soil', 'ethnic cleansing', 'great replacement',
-  'kkk', 'white lives matter', '14 words', '1488', 'six million wasn\'t enough',
-  'going ER', 'beta uprising', 'soy boy', 'femoid',
-  'roastie', 'chad', 'stacy', 'rape fuel', 'gymcel', 'kill all women',
-  'mass shooter vibes', 'school shooter',
+  'gas the',
+  'heil h',
+  's h', 'oven dodger', 'hook nose', 'dirty jew',
+  'ashkenazi',
+  'faggot', 'dyke', 'tranny',
+  'no homo',
+  'fudge',
+  'shemale',
+  'drag ',
+  'queer', 'retard',
+  'spastic', 'mongoloid',
+  'window l',
+  'cripple', 'vegetable',
+  'bitch',
+  'cunt',
+  'slut', 'whore',
+  'ho',
+  'dumb broad', 'make me a sandwich',
+  'women can',
+  'drive', 'she’s a',
+  'rape her', 'kill all',
+  'rape',
+  'rape you',
+  'her',
+  'kill all',
+  'kys', 'kill', 'kys',
+  'self',
+  'aid to',
+  'yourself', ' ',
+
+  'beat',
+  'abuse her',
+  'pedophile',
+  'pedo',
+  'her',
+  'build the wall', 'go back to your country',
+  'illegal alien', ' 'white power',
+  'white pride',
+  'blood and soil',
+  'ethnic cleansing',
+  ' 'great replacement',
+  ' 'kkk',
+  ' 'white lives matter',
+  '14 words', ' '1488',
+  'six million wasn’t enough',
+  ' 'going ER',
+  'beta uprising',
+  ' 'soy boy',
+  ' 'femoid',
+  ' 'roastie',
+  ' 'chad', ' 'stacy',
+  'rape fuel',
+  ' 'gymcel',
+  ' 'kill all women',
+
+  'mass shooter',
+  'school shooter',
+
   'fuck you', 'die', 'i hope you die', 'you should die', 'kill all',
   'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
 ];
@@ -412,6 +485,209 @@ async function sendDiscordNotification(mods, channelId) {
   }
 }
 
+// News scraping functions
+const ARTICLES_CACHE_FILE = path.join(dataDir, 'lastest.json');
+let articlesCache = { categories: {}, lastResetDate: new Date().toISOString() };
+const BASE_URL = 'https://www.starwarsnewsnet.com/category/';
+const CATEGORIES = ['star-wars'];
+const MAX_RETRIES = 2;
+const NAVIGATION_TIMEOUT = 60000;
+const PROTOCOL_TIMEOUT = 120000;
+
+async function loadArticlesCache() {
+  try {
+    const data = await fs.readFile(ARTICLES_CACHE_FILE, 'utf8');
+    const cache = JSON.parse(data);
+    articlesCache = cache;
+    console.log(`📂 Loaded ${ARTICLES_CACHE_FILE} from disk.`);
+    return cache;
+  } catch (error) {
+    console.log(`No ${ARTICLES_CACHE_FILE} found or error loading, using in-memory cache:`, error.message);
+    return articlesCache;
+  }
+}
+
+async function saveArticlesCache(cache) {
+  articlesCache = cache;
+  try {
+    await fs.writeFile(ARTICLES_CACHE_FILE, JSON.stringify(cache, null, 2));
+    const stats = await fs.stat(ARTICLES_CACHE_FILE);
+    console.log(`💾 Saved ${ARTICLES_CACHE_FILE} to disk (size: ${stats.size} bytes).`);
+  } catch (error) {
+    console.error(`❌ Error saving ${ARTICLES_CACHE_FILE}, continuing with in-memory cache:`, error.message);
+  }
+}
+
+async function scrapeArticles(category) {
+  let browser;
+  let attempt = 1;
+  const url = `${BASE_URL}${category}`;
+
+  while (attempt <= MAX_RETRIES) {
+    try {
+      console.log(`🌐 Launching Puppeteer for ${category} (Attempt ${attempt}/${MAX_RETRIES})...`);
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-features=site-per-process',
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--single-process',
+        ],
+        pipe: true,
+        protocolTimeout: PROTOCOL_TIMEOUT,
+      });
+      console.log('Browser launched successfully.');
+
+      const page = await browser.newPage();
+      console.log(`Navigating to ${url}...`);
+
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
+      await page.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT);
+      await page.setJavaScriptEnabled(false);
+
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      console.log(`Page loaded successfully for ${category}.`);
+
+      const selector = 'article';
+      await page.waitForSelector(selector, { timeout: 20000 }).catch(() => console.log('No articles found, proceeding with available DOM.'));
+
+      await page.screenshot({ path: path.join(dataDir, `debug-${category}.png`) }).catch(err => console.error(`Error saving screenshot for ${category}:`, err));
+      const html = await page.content();
+      await fs.writeFile(path.join(dataDir, `debug-${category}.html`), html).catch(err => console.error(`Error saving HTML for ${category}:`, err));
+
+      const articles = await page.evaluate(() => {
+        const articleElements = Array.from(document.querySelectorAll('article[class*="post"], article[class*="hentry"], article[class*="category"]'));
+        const results = [];
+        const seenUrls = new Set();
+
+        for (const el of articleElements) {
+          const titleElem = el.querySelector('h2.entry-title a');
+          const dateElem = el.querySelector('time.entry-date, span.posted-on [datetime]');
+          const categoryElems = el.querySelectorAll('a[rel="category tag"]');
+
+          const title = titleElem ? titleElem.textContent.trim() : '';
+          let url = titleElem ? titleElem.getAttribute('href') || '' : '';
+          if (url && !url.startsWith('http')) {
+            url = 'https://www.starwarsnewsnet.com' + (url.startsWith('/') ? url : '/' + url);
+          }
+          const date = dateElem ? dateElem.getAttribute('datetime') || dateElem.textContent.trim() : 'N/A';
+          const categories = Array.from(categoryElems).map(cat => cat.textContent.trim()).filter(c => c);
+
+          if (
+            title &&
+            url &&
+            !seenUrls.has(url) &&
+            !title.toLowerCase().includes('read more') &&
+            !/^\d{4}-\d{2}-\d{2}$/.test(title) &&
+            !/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$/.test(title) &&
+            url.includes('starwarsnewsnet.com')
+          ) {
+            seenUrls.add(url);
+            results.push({
+              title,
+              url,
+              date,
+              categories: categories.length ? categories : ['Uncategorized']
+            });
+            console.log(`Extracted article: ${title} (${date})`);
+          }
+        }
+
+        console.log(`Total articles extracted: ${results.length}`);
+        return results;
+      });
+
+      console.log(`🌐 Scraped ${articles.length} articles from ${category}.`);
+      return articles;
+    } catch (error) {
+      console.error(`❌ Error scraping ${category} (Attempt ${attempt}/${MAX_RETRIES}):`, error);
+      if (attempt === MAX_RETRIES) {
+        console.error(`Max retries reached for ${category}. Returning empty array.`);
+        return [];
+      }
+      attempt++;
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (err) {
+          console.error(`Error closing browser for ${category}:`, err);
+        }
+      }
+    }
+  }
+}
+
+async function sendDiscordWebhookNotification(category, articles) {
+  if (!articles.length) {
+    console.log(`⚠️ No articles to send for ${category}`);
+    return;
+  }
+
+  try {
+    const sortedArticles = articles.sort((a, b) => {
+      const dateA = a.date !== 'N/A' ? Date.parse(a.date) : Infinity;
+      const dateB = b.date !== 'N/A' ? Date.parse(b.date) : Infinity;
+      return dateA - dateB;
+    });
+
+    for (const article of sortedArticles) {
+      const message = `**🌟 New Star Wars Article**\n` +
+                      `**Title**: ${article.title}\n` +
+                      `**Date**: ${article.date !== 'N/A' ? article.date : 'Unknown'}\n` +
+                      `**Categories**: ${article.categories.join(', ')}\n` +
+                      `**Link**: ${article.url}`;
+      await webhookClient.send({
+        content: message,
+        username: 'Star Wars News Bot',
+        avatarURL: 'https://www.starwarsnewsnet.com/wp-content/uploads/2020/01/cropped-swnn-favicon-1.png'
+      });
+      console.log(`📤 Sent webhook notification for ${category}: ${article.title} (${article.date})`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  } catch (error) {
+    console.error(`❌ Error sending webhook notification for ${category}:`, error.message);
+  }
+}
+
+async function checkForNewArticles() {
+  console.log('🔎 Checking for new Star Wars news updates...');
+  const cache = await loadArticlesCache();
+  if (!cache.categories) cache.categories = {};
+
+  for (const category of CATEGORIES) {
+    console.log(`🌐 Checking category: ${category}`);
+    try {
+      const cachedUrls = new Set((cache.categories[category] || []).map(article => article.url));
+      const newArticles = await scrapeArticles(category);
+
+      const updates = newArticles.filter(article => !cachedUrls.has(article.url));
+
+      if (updates.length > 0) {
+        console.log(`✅ Found ${updates.length} new articles in ${category}:`);
+        updates.forEach(article => console.log(`→ ${article.title} (${article.date})`));
+
+        await sendDiscordWebhookNotification(category, updates);
+
+        cache.categories[category] = [...newArticles, ...(cache.categories[category] || [])].slice(0, 100);
+        await saveArticlesCache(cache);
+      } else {
+        console.log(`ℹ️ No new articles found in ${category}.`);
+      }
+    } catch (error) {
+      console.error(`❌ Error processing category ${category}:`, error.message);
+    }
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+
+  cache.lastResetDate = new Date().toISOString();
+  await saveArticlesCache(cache);
+}
+
 async function checkForNewMods() {
   console.log('🔎 Checking for new mods...');
   try {
@@ -475,135 +751,143 @@ async function checkForNewMods() {
 }
 
 client.once('ready', async () => {
-  console.log(`Bot logged in as ${client.user.tag}`);
-
-  await loadUsers();
-  await loadModCache();
-  await loadPersonalModCache();
-
-  await registerCommands();
-
-  const channel = client.channels.cache.get(WELCOME_CHANNEL_ID);
-  if (!channel) {
-    console.error('Welcome channel not found:', WELCOME_CHANNEL_ID);
-    return;
-  }
-
-  const embed = new EmbedBuilder()
-    .setTitle('The strongest stars have hearts of kyber.')
-    .setDescription(
-      'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n\n' +
-      Object.keys(roleMapping)
-        .map(emojiId => {
-          const emoji = client.emojis.cache.get(emojiId);
-          return emoji ? `<:${emoji.name}:${emojiId}> ${emoji.name}` : '';
-        })
-        .filter(line => line)
-        .join('\n')
-    )
-    .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' })
-    .setColor('#FFD700');
-
-  let message;
-  const messageId = process.env[MESSAGE_ID_KEY];
-  if (messageId) {
-    try {
-      message = await channel.messages.fetch(messageId);
-      console.log('Found existing message:', messageId);
-      if (message.embeds.length === 0 || message.embeds[0].title !== embed.data.title) {
-        console.log('Existing message is not the expected embed, creating new one');
-        message = null;
-      }
-    } catch (error) {
-      console.error('Error fetching message:', error.message);
-    }
-  } else {
-    console.log('No message ID provided in environment variables');
-  }
-
-  if (!message) {
-    try {
-      message = await channel.send({ embeds: [embed] });
-      console.log(`New message posted with ID: ${message.id}`);
-      console.log('Please update REACTION_ROLE_MESSAGE_ID in Render environment variables with:', message.id);
-      for (const emojiId of Object.keys(roleMapping)) {
-        await message.react(emojiId).catch(console.error);
-      }
-    } catch (error) {
-      console.error('Error posting new embed:', error.message);
-    }
-  }
-
-  console.log('🔎 Performing initial mod check and sort...');
   try {
-    // General mods (API)
-    const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const apiSeen = new Set(globalCache.mods.map(m => m.url));
-    const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(mod.url));
-    console.log(`Found ${newInitialApiMods.length} new initial API mods to process.`);
-    if (newInitialApiMods.length) {
-      console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
-      newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
-      try {
-        await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
-      } catch (err) {
-        console.error('❌ Error sending initial API mod notifications:', err.message);
-      }
-      newInitialApiMods.forEach(newMod => {
-        let inserted = false;
-        for (let i = 0; i < globalCache.mods.length; i++) {
-          if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
-            globalCache.mods.splice(i, 0, newMod);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) globalCache.mods.push(newMod);
-      });
-      globalCache.mods = globalCache.mods.slice(0, 100000);
-      globalCache.lastChecked = new Date().toISOString();
-      await saveModCache();
-    } else {
-      console.log('ℹ️ No new initial API mods found.');
+    console.log(`✅ Bot logged in as ${client.user.tag}`);
+
+    await loadUsers();
+    await loadModCache();
+    await loadPersonalModCache();
+    await loadArticlesCache();
+
+    await registerCommands();
+
+    const channel = client.channels.cache.get(WELCOME_CHANNEL_ID);
+    if (!channel) {
+      console.error('❌ Welcome channel not found:', WELCOME_CHANNEL_ID);
+      return;
     }
 
-    // Personal mods (API)
-    const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const personalSeen = new Set(personalCache.mods.map(m => m.url));
-    const allSeen = new Set([...globalCache.mods.map(m => m.url), ...personalCache.mods.map(m => m.url)]);
-    const newInitialPersonalMods = initialPersonalMods.filter(mod => !allSeen.has(mod.url));
-    console.log(`Found ${newInitialPersonalMods.length} new initial personal mods to process.`);
-    if (newInitialPersonalMods.length) {
-      console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods.`);
-      newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+    const embed = new EmbedBuilder()
+      .setTitle('The strongest stars have hearts of kyber.')
+      .setDescription(
+        'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n\n' +
+        Object.keys(roleMapping)
+          .map(emojiId => {
+            const emoji = client.emojis.cache.get(emojiId);
+            return emoji ? `<:${emoji.name}:${emojiId}> ${emoji.name}` : '';
+          })
+          .filter(line => line)
+          .join('\n')
+      )
+      .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' })
+      .setColor('#FFD700');
+
+    let message;
+    const messageId = process.env[MESSAGE_ID_KEY];
+    if (messageId) {
       try {
-        await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
-      } catch (err) {
-        console.error('❌ Error sending initial personal mod notifications:', err.message);
-      }
-      newInitialPersonalMods.forEach(newMod => {
-        let inserted = false;
-        for (let i = 0; i < personalCache.mods.length; i++) {
-          if (new Date(newMod.date) < new Date(personalCache.mods[i].date)) {
-            personalCache.mods.splice(i, 0, newMod);
-            inserted = true;
-            break;
-          }
+        message = await channel.messages.fetch(messageId);
+        console.log('✅ Found existing message:', messageId);
+        if (message.embeds.length === 0 || message.embeds[0].title !== embed.data.title) {
+          console.log('Existing message is not the expected embed, creating new one');
+          message = null;
         }
-        if (!inserted) personalCache.mods.push(newMod);
-      });
-      personalCache.mods = personalCache.mods.slice(0, 1000);
-      personalCache.lastResetDate = new Date().toISOString();
-      await savePersonalModCache();
+      } catch (error) {
+        console.error('❌ Error fetching message:', error.message);
+      }
     } else {
-      console.log('ℹ️ No new initial personal mods found.');
+      console.log('No message ID provided in environment variables');
     }
+
+    if (!message) {
+      try {
+        message = await channel.send({ embeds: [embed] });
+        console.log(`✅ New message posted with ID: ${message.id}`);
+        console.log('Please update REACTION_ROLE_MESSAGE_ID in Render environment variables with:', message.id);
+        for (const emojiId of Object.keys(roleMapping)) {
+          await message.react(emojiId).catch(console.error);
+        }
+      } catch (error) {
+        console.error('❌ Error posting new embed:', error.message);
+      }
+    }
+
+    console.log('🔎 Performing initial checks...');
+    try {
+      // Initial mod check
+      const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const apiSeen = new Set(globalCache.mods.map(m => m.url));
+      const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(mod.url));
+      console.log(`✅ Found ${newInitialApiMods.length} new initial API mods to process.`);
+      if (newInitialApiMods.length) {
+        console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
+        newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+        try {
+          await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
+        } catch (err) {
+          console.error('❌ Error sending initial API mod notifications:', err.message);
+        }
+        newInitialApiMods.forEach(newMod => {
+          let inserted = false;
+          for (let i = 0; i < globalCache.mods.length; i++) {
+            if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
+              globalCache.mods.splice(i, 0, newMod);
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) globalCache.mods.push(newMod);
+        });
+        globalCache.mods = globalCache.mods.slice(0, 100000);
+        globalCache.lastChecked = new Date().toISOString();
+        await saveModCache();
+      } else {
+        console.log('ℹ️ No new initial API mods found.');
+      }
+
+      const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const personalSeen = new Set(personalCache.mods.map(m => m.url));
+      const allSeen = new Set([...globalCache.mods.map(m => m.url), ...personalCache.mods.map(m => m.url)]);
+      const newInitialPersonalMods = initialPersonalMods.filter(mod => !allSeen.has(mod.url));
+      console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods to process.`);
+      if (newInitialPersonalMods.length) {
+        console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods.`);
+        newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+        try {
+          await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
+        } catch (err) {
+          console.error('❌ Error sending initial personal mod notifications:', err.message);
+        }
+        newInitialPersonalMods.forEach(newMod => {
+          let inserted = false;
+          for (let i = 0; i < personalCache.mods.length; i++) {
+            if (new Date(newMod.date) < new Date(personalCache.mods[i].date)) {
+              personalCache.mods.splice(i, 0, newMod);
+              inserted = true;
+            }
+          }
+          if (!inserted) personalCache.mods.push(newMod);
+        });
+        personalCache.mods = personalCache.mods.slice(0, 1000);
+        personalCache.lastResetDate = new Date().toISOString();
+        await savePersonalModCache();
+      } else {
+        console.log('ℹ️ No new initial personal mods found.');
+      }
+
+      // Initial articles check
+      await checkForNewArticles();
+    } catch (err) {
+      console.error('❌ Error during initial checks:', err.message);
+    }
+
+    // Start polling loops
+    setInterval(checkForNewMods, 10 * 60 * 1000); // Every 10 minutes
+    setInterval(checkForNewArticles, 30 * 60 * 1000); // Every 30 minutes
   } catch (err) {
-    console.error('❌ Error during initial mod fetch:', err.message);
+    console.error('❌ Fatal error in ready event:', err);
+    process.exit(1);
   }
-
-  // Start polling loop
-  setInterval(checkForNewMods, 10 * 60 * 1000); // Every 10 minutes
 });
 
 client.on('messageCreate', async (message) => {
@@ -635,10 +919,10 @@ client.on('messageCreate', async (message) => {
           files: [gifFile]
         });
       } else {
-        console.error('GIF file missing at:', gifPath);
+        console.error('❌ GIF file missing at:', gifPath);
       }
     } catch (err) {
-      console.error('Failed to handle extreme content:', err);
+      console.error('❌ Failed to handle extreme content:', err);
     }
     return;
   }
@@ -664,10 +948,10 @@ client.on('messageCreate', async (message) => {
             });
           }
         } catch (err) {
-          console.error('Failed to send mod alert:', err);
+          console.error('❌ Failed to send mod alert:', err);
         }
       } else {
-        console.error('Audio file missing at:', filePath);
+        console.error('❌ Audio file missing at:', filePath);
       }
     }
   }
@@ -715,7 +999,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       try {
-        console.log(`Detecting language for text: ${text}`);
+        console.log(`🔍 Detecting language for text: ${text}`);
         const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
         const detectedLang = detectRes.data?.[0]?.language || 'unknown';
 
@@ -724,7 +1008,7 @@ client.on('interactionCreate', async interaction => {
           return;
         }
 
-        console.log(`Translating from ${detectedLang} to ${targetLang}`);
+        console.log(`🌍 Translating from ${detectedLang} to ${targetLang}`);
         const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
           q: text,
           source: detectedLang,
@@ -813,20 +1097,20 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reaction.partial) await reaction.fetch();
 
   if (user.bot || reaction.message.channel.id !== WELCOME_CHANNEL_ID) {
-    console.log(`Ignoring reaction: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
+    console.log(`ℹ️ Ignoring reaction: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
     return;
   }
 
   const messageId = process.env[MESSAGE_ID_KEY];
   if (!messageId || reaction.message.id !== messageId) {
-    console.log(`Ignoring reaction: Message ID ${reaction.message.id} does not match expected ${messageId}`);
+    console.log(`ℹ️ Ignoring reaction: Message ID ${reaction.message.id} does not match expected ${messageId}`);
     return;
   }
 
   const emojiId = reaction.emoji.id;
-  console.log(`Reaction added by ${user.tag}: Emoji ID ${emojiId}`);
+  console.log(`✅ Reaction added by ${user.tag}: Emoji ID ${emojiId}`);
   if (!emojiId || !Object.keys(roleMapping).includes(emojiId)) {
-    console.log(`No role found for emoji ID ${emojiId}`);
+    console.log(`⚠️ No role found for emoji ID ${emojiId}`);
     return;
   }
 
@@ -835,11 +1119,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
   try {
     member = await reaction.message.guild.members.fetch(user.id);
   } catch (error) {
-    console.error(`Error fetching member ${user.id}:`, error.message);
+    console.error(`❌ Error fetching member ${user.id}:`, error.message);
     return;
   }
   if (!member) {
-    console.error(`Member ${user.id} not found`);
+    console.error(`⚠️ Member ${user.id} not found`);
     return;
   }
 
@@ -847,23 +1131,23 @@ client.on('messageReactionAdd', async (reaction, user) => {
     for (const eId of Object.keys(roleMapping)) {
       if (roleMapping[eId] !== roleId && member.roles.cache.has(roleMapping[eId])) {
         await member.roles.remove(roleMapping[eId]);
-        console.log(`Removed role ${roleMapping[eId]} from ${user.tag}`);
+        console.log(`✅ Removed role ${roleMapping[eId]} from ${user.tag}`);
       }
     }
   } catch (error) {
-    console.error(`Error removing other roles from ${user.tag}:`, error.message);
+    console.error(`❌ Error removing other roles from ${user.tag}:`, error.message);
     return;
   }
 
   try {
     if (!member.roles.cache.has(roleId)) {
       await member.roles.add(roleId);
-      console.log(`Added role ${roleId} to ${user.tag}`);
+      console.log(`✅ Added role ${roleId} to ${user.tag}`);
     } else {
       console.log(`${user.tag} already has role ${roleId}`);
     }
   } catch (error) {
-    console.error(`Error adding role ${roleId} to ${user.tag}:`, error.message);
+    console.error(`❌ Error adding role ${roleId} to ${user.tag}:`, error.message);
   }
 });
 
@@ -872,20 +1156,20 @@ client.on('messageReactionRemove', async (reaction, user) => {
   if (reaction.partial) await reaction.fetch();
 
   if (user.bot || reaction.message.channel.id !== WELCOME_CHANNEL_ID) {
-    console.log(`Ignoring reaction removal: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
+    console.log(`ℹ️ Ignoring reaction removal: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
     return;
   }
 
   const messageId = process.env[MESSAGE_ID_KEY];
   if (!messageId || reaction.message.id !== messageId) {
-    console.log(`Ignoring reaction removal: Message ID ${reaction.message.id} does not match expected ${messageId}`);
+    console.log(`ℹ️ Ignoring reaction removal: Message ID ${reaction.message.id} does not match expected ${messageId}`);
     return;
   }
 
   const emojiId = reaction.emoji.id;
-  console.log(`Reaction removed by ${user.tag}: Emoji ID ${emojiId}`);
+  console.log(`✅ Reaction removed by ${user.tag}: Emoji ID ${emojiId}`);
   if (!emojiId || !Object.keys(roleMapping).includes(emojiId)) {
-    console.log(`No role found for emoji ID ${emojiId}`);
+    console.log(`⚠️ No role found for emoji ID ${emojiId}`);
     return;
   }
 
@@ -894,31 +1178,31 @@ client.on('messageReactionRemove', async (reaction, user) => {
   try {
     member = await reaction.message.guild.members.fetch(user.id);
   } catch (error) {
-    console.error(`Error fetching member ${user.id}:`, error.message);
+    console.error(`❌ Error fetching member ${user.id}:`, error.message);
     return;
   }
   if (!member) {
-    console.error(`Member ${user.id} not found`);
+    console.error(`⚠️ Member ${user.id} not found`);
     return;
   }
 
   try {
     if (member.roles.cache.has(roleId)) {
       await member.roles.remove(roleId);
-      console.log(`Removed role ${roleId} from ${user.tag}`);
+      console.log(`✅ Removed role ${roleId} from ${user.tag}`);
     } else {
       console.log(`${user.tag} does not have role ${roleId}`);
     }
   } catch (error) {
-    console.error(`Error removing role ${roleId} from ${user.tag}:`, error.message);
+    console.error(`❌ Error removing role ${roleId} from ${user.tag}:`, error.message);
   }
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+  console.error('❌ Uncaught Exception:', error);
 });
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 client.login(DISCORD_TOKEN);

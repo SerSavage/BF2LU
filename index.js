@@ -680,12 +680,6 @@ async function checkSWUpdates() {
       return;
     }
 
-    const newArticles = fresh.filter(a => !swCache.find(c => c.url === a.url));
-    if (!newArticles.length) {
-      console.log('📰 No new Star Wars articles found.');
-      return;
-    }
-
     const swChannel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
       console.error('❌ Failed to fetch SW_CHANNEL_ID:', err.message);
       return null;
@@ -710,7 +704,6 @@ async function checkSWUpdates() {
   }
 }
 
-  const newArticles = fresh.filter(a => !swCache.find(c => c.url === a.url));
   if (!newArticles.length) {
     console.log('📰 No new Star Wars articles found.');
     return;
@@ -729,13 +722,10 @@ async function checkSWUpdates() {
   }
 
   swCache = [...newArticles, ...swCache];
-  await saveSWCache();
-  console.log(`✅ Posted ${newArticles.length} new articles to Discord.`);
 }
 
 // Start the Star Wars news monitor
 setInterval(checkSWUpdates, 30 * 60 * 1000); // Every 30 minutes
-client.once('ready', checkSWUpdates); // Initial check at bot startup
 
 
   // Start polling loop

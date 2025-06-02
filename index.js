@@ -506,6 +506,38 @@ client.once('ready', async () => {
     }
   }
 
+// Simulate initial post for BF Poofies (mod_id 11814) as of April 30, 2025
+  const initialModId = 11814;
+  const initialDate = new Date('2025-04-30T00:00:00.000Z');
+  if (!personalCache.mods[initialModId]) {
+    console.log(`📡 Simulating initial post for BF Poofies (mod_id ${initialModId}) on ${initialDate.toISOString()}...`);
+    const initialMod = {
+      title: 'BF Poofies',
+      url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${initialModId}`,
+      date: initialDate.toISOString(),
+      category: 'Customization',
+      version: '1.0.0',
+      mod_id: initialModId
+    };
+    personalCache.mods[initialModId] = initialMod;
+    personalCache.lastResetDate = initialDate.toISOString();
+    await savePersonalModCache();
+
+    const personalChannel = await client.channels.fetch(PERSONAL_NEXUS_CHANNEL_ID);
+    if (personalChannel && personalChannel.isTextBased()) {
+      const embed = new EmbedBuilder()
+        .setTitle(`🛠️ Initial Post: ${initialMod.title}`)
+        .setDescription(`**Version**: ${initialMod.version}\n**Date**: ${initialMod.date}\n**Category**: ${initialMod.category}\n[Download](${initialMod.url})`)
+        .setColor('#00FF00')
+        .setFooter({ text: 'Star Wars: Battlefront II Mods' })
+        .setTimestamp();
+      await personalChannel.send({ embeds: [embed] });
+      console.log(`✅ Initial post for ${initialMod.title} sent to ${PERSONAL_NEXUS_CHANNEL_ID}`);
+    }
+  } else {
+    console.log(`ℹ️ Initial post for BF Poofies (mod_id ${initialModId}) already exists, skipping.`);
+  }
+
   // Only perform initial mod check if cache is empty or outdated
   const lastChecked = new Date(globalCache.lastChecked);
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);

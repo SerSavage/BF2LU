@@ -365,16 +365,16 @@ async function sendDiscordNotification(mods, channelId) {
   }
 
   for (const mod of mods) {
-    const message = `**🛠️ New Mod Update for Star Wars: Battlefront II**\n` +
-                    `**Title**: ${mod.title}\n` +
-                    `**Version**: ${mod.version}\n` +
-                    `**Date**: ${mod.date}\n` +
-                    `**Category**: ${mod.category}\n` +
-                    `**Link**: ${mod.url}`;
+    const embed = new EmbedBuilder()
+      .setTitle(`🛠️ New Mod Update: ${mod.title}`)
+      .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
+      .setColor('#00FF00') // Green for success
+      .setFooter({ text: 'Star Wars: Battlefront II Mods' })
+      .setTimestamp();
 
     try {
       console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title} (v${mod.version})`);
-      await channel.send({ content: message });
+      await channel.send({ embeds: [embed] });
       console.log(`✅ Successfully sent: ${mod.title}`);
     } catch (err) {
       console.error(`❌ Failed to send "${mod.title}" to Discord channel ${channelId}:`, err.message);
@@ -501,73 +501,67 @@ client.once('ready', async () => {
       for (const emojiId of Object.keys(roleMapping)) {
         await message.react(emojiId).catch(console.error);
       }
-    } catch (error) {
+} catch (error) {
       console.error('Error posting new embed:', error.message);
     }
   }
 
-  console.log('🔎 Performing initial mod check and sort...');
-  try {
-    // General mods (API)
-    const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
-    const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
-    console.log(`Found ${newInitialApiMods.length} new initial API mods to process.`);
-    if (newInitialApiMods.length) {
-      console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
-      newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
-      try {
+  // Only perform initial mod check if cache is empty or outdated
+  const lastChecked = new Date(globalCache.lastChecked);
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  if (isNaN(lastChecked) || lastChecked < oneDayAgo) {
+    console.log('🔎 Performing initial mod check and sort since cache is empty or outdated...');
+    try {
+      const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
+      const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
+      if (newInitialApiMods.length) {
+        console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
+        newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
         await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
-      } catch (err) {
-        console.error('❌ Error sending initial API mod notifications:', err.message);
-      }
-      newInitialApiMods.forEach(newMod => {
-        let inserted = false;
-        for (let i = 0; i < globalCache.mods.length; i++) {
-          if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
-            globalCache.mods.splice(i, 0, newMod);
-            inserted = true;
-            break;
+        newInitialApiMods.forEach(newMod => {
+          let inserted = false;
+          for (let i = 0; i < globalCache.mods.length; i++) {
+            if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
+              globalCache.mods.splice(i, 0, newMod);
+              inserted = true;
+              break;
+            }
           }
+          if (!inserted) globalCache.mods.push(newMod);
+        });
+        globalCache.mods = globalCache.mods.slice(0, 100000);
+        globalCache.lastChecked = new Date().toISOString();
+        await saveModCache();
+      } else {
+        console.log('ℹ️ No new initial API mods found.');
+      }
+
+      const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const newInitialPersonalMods = [];
+      for (const mod of initialPersonalMods) {
+        const cachedMod = personalCache.mods[mod.mod_id] || {};
+        const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
+        const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
+        if (isNewVersion || isNewDate) {
+          newInitialPersonalMods.push(mod);
+          personalCache.mods[mod.mod_id] = mod;
         }
-        if (!inserted) globalCache.mods.push(newMod);
-      });
-      globalCache.mods = globalCache.mods.slice(0, 100000);
-      globalCache.lastChecked = new Date().toISOString();
-      await saveModCache();
-    } else {
-      console.log('ℹ️ No new initial API mods found.');
-    }
-
-    // Personal mods (API)
-    const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const newInitialPersonalMods = [];
-    for (const mod of initialPersonalMods) {
-      const cachedMod = personalCache.mods[mod.mod_id] || {};
-      const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
-      const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
-      if (isNewVersion || isNewDate) {
-        newInitialPersonalMods.push(mod);
-        personalCache.mods[mod.mod_id] = mod;
       }
-    }
-
-    console.log(`Found ${newInitialPersonalMods.length} new initial personal mods to process.`);
-    if (newInitialPersonalMods.length) {
-      console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods.`);
-      newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
-      try {
+      if (newInitialPersonalMods.length) {
+        console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods.`);
+        newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
         await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
-      } catch (err) {
-        console.error('❌ Error sending initial personal mod notifications:', err.message);
+        personalCache.lastResetDate = new Date().toISOString();
+        await savePersonalModCache();
+      } else {
+        console.log('ℹ️ No new initial personal mods found.');
       }
-      personalCache.lastResetDate = new Date().toISOString();
-      await savePersonalModCache();
-    } else {
-      console.log('ℹ️ No new initial personal mods found.');
+    } catch (err) {
+      console.error('❌ Error during initial mod fetch:', err.message);
     }
-  } catch (err) {
-    console.error('❌ Error during initial mod fetch:', err.message);
+  } else {
+    console.log('🔎 Skipping initial mod check: Cache is recent (last checked:', globalCache.lastChecked, ')');
   }
 
   // Start polling loop

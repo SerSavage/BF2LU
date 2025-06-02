@@ -686,18 +686,19 @@ async function checkSWUpdates() {
       return;
     }
 
-    const channel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
+    const swChannel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
       console.error('❌ Failed to fetch SW_CHANNEL_ID:', err.message);
       return null;
     });
-    if (!channel || !channel.isTextBased()) {
+
+    if (!swChannel || !swChannel.isTextBased()) {
       console.error('❌ Invalid SW Discord channel or not text-based.');
       return;
     }
 
     for (const article of newArticles) {
       const msg = `📰 **New Star Wars Article**\n**Title**: ${article.title}\n**Date**: ${article.date}\n**Link**: ${article.url}`;
-      await channel.send({ content: msg }).catch(console.error);
+      await swChannel.send({ content: msg }).catch(console.error);
       await new Promise(r => setTimeout(r, 1500));
     }
 

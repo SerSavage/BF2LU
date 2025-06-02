@@ -368,6 +368,7 @@ async function sendDiscordNotification(mods, channelId) {
     const embed = new EmbedBuilder()
       .setTitle(`🛠️ New Mod Update: ${mod.title}`)
       .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
+      .setImage(mod.picture_url || '') // Add the mod image if available
       .setColor('#00FF00') // Green for success
       .setFooter({ text: 'Star Wars: Battlefront II Mods' })
       .setTimestamp();

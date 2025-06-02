@@ -513,6 +513,22 @@ async function scrapeArticles(category) {
   let attempt = 1;
   const url = `${BASE_URL}${category}`;
 
+  // Fallback: Install Chrome if not found
+  try {
+    console.log('🔍 Verifying Chrome installation...');
+    const chromePath = '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
+    if (!require('fs').existsSync(chromePath)) {
+      console.log('⚠️ Chrome not found, attempting installation...');
+      execSync('npx puppeteer browsers install chrome@131.0.6778.204 --verbose', { stdio: 'inherit' });
+      console.log('✅ Chrome installed successfully.');
+    } else {
+      console.log('✅ Chrome found at', chromePath);
+    }
+  } catch (err) {
+    console.error('❌ Failed to install Chrome:', err.message);
+    return [];
+  }
+
   while (attempt <= MAX_RETRIES) {
     try {
       console.log(`🌐 Launching Puppeteer for ${category} (Attempt ${attempt}/${MAX_RETRIES})...`);
@@ -528,6 +544,7 @@ async function scrapeArticles(category) {
         ],
         pipe: true,
         protocolTimeout: PROTOCOL_TIMEOUT,
+        executablePath: '/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome'
       });
       console.log('Browser launched successfully.');
 

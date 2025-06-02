@@ -602,6 +602,98 @@ client.once('ready', async () => {
     console.log('🔎 Skipping initial mod check: Cache is recent (last checked:', globalCache.lastChecked, ')');
   }
 
+// === Star Wars News Scraper Integration ===
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
+
+const NEWS_CATEGORY = 'star-wars';
+const SW_CACHE_FILE = path.join(dataDir, 'sw_articles.json');
+const SW_URL = `https://www.starwarsnewsnet.com/category/${NEWS_CATEGORY}`;
+const SW_CHANNEL_ID = process.env.DISCORD_SW_CHANNEL_ID; // ← Set this in .env
+
+let swCache = [];
+
+async function loadSWCache() {
+  try {
+    const data = await fs.readFile(SW_CACHE_FILE, 'utf8');
+    swCache = JSON.parse(data);
+    console.log(`📰 Loaded Star Wars articles from cache (${swCache.length})`);
+  } catch {
+    swCache = [];
+    await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache), 'utf8');
+  }
+}
+
+async function saveSWCache() {
+  await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache.slice(0, 100), null, 2), 'utf8');
+}
+
+async function scrapeSWArticles() {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  const page = await browser.newPage();
+  await page.setJavaScriptEnabled(false);
+  await page.goto(SW_URL, { waitUntil: 'domcontentloaded' });
+
+  const articles = await page.evaluate(() => {
+    const entries = [];
+    const seen = new Set();
+    const elements = document.querySelectorAll('article');
+    for (const el of elements) {
+      const titleEl = el.querySelector('h2.entry-title a');
+      const timeEl = el.querySelector('time.entry-date');
+      const title = titleEl?.textContent?.trim();
+      let url = titleEl?.href?.trim();
+      const date = timeEl?.getAttribute('datetime') || 'Unknown';
+      if (title && url && !seen.has(url)) {
+        seen.add(url);
+        if (!url.startsWith('http')) {
+          url = 'https://www.starwarsnewsnet.com' + (url.startsWith('/') ? url : '/' + url);
+        }
+        entries.push({ title, url, date });
+      }
+    }
+    return entries;
+  });
+
+  await browser.close();
+  return articles;
+}
+
+async function checkSWUpdates() {
+  await loadSWCache();
+  const fresh = await scrapeSWArticles();
+  const newArticles = fresh.filter(a => !swCache.find(c => c.url === a.url));
+  if (!newArticles.length) {
+    console.log('📰 No new Star Wars articles found.');
+    return;
+  }
+
+  const channel = await client.channels.fetch(SW_CHANNEL_ID).catch(() => null);
+  if (!channel || !channel.isTextBased()) {
+    console.error('❌ Invalid SW Discord channel ID or not text-based.');
+    return;
+  }
+
+  for (const article of newArticles) {
+    const msg = `📰 **New Star Wars Article**\n**Title**: ${article.title}\n**Date**: ${article.date}\n**Link**: ${article.url}`;
+    await channel.send({ content: msg }).catch(console.error);
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  swCache = [...newArticles, ...swCache];
+  await saveSWCache();
+  console.log(`✅ Posted ${newArticles.length} new articles to Discord.`);
+}
+
+// Start the Star Wars news monitor
+setInterval(checkSWUpdates, 30 * 60 * 1000); // Every 30 minutes
+client.once('ready', checkSWUpdates); // Initial check at bot startup
+
+
   // Start polling loop
   setInterval(checkForNewMods, 10 * 60 * 1000); // Every 10 minutes
 });

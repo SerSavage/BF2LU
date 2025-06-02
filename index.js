@@ -5,9 +5,15 @@ const axios = require('axios');
 const express = require('express');
 require('dotenv').config();
 
-const dataDir = '/app/data';
-if (!require('fs').existsSync(dataDir)) {
-  require('fs').mkdirSync(dataDir, { recursive: true });
+const dataDir = '/tmp'; // Use /tmp for writable filesystem
+try {
+  if (!require('fs').existsSync(dataDir)) {
+    require('fs').mkdirSync(dataDir, { recursive: true });
+    console.log(`Created directory ${dataDir}`);
+  }
+} catch (err) {
+  console.error(`❌ Failed to create/check directory ${dataDir}:`, err.message);
+  process.exit(1); // Exit if /tmp isn’t writable
 }
 
 const app = express();
@@ -34,7 +40,7 @@ const client = new Client({
 const commands = require('./commands.json');
 
 let users = {};
-const usersFile = path.join(__dirname, 'users.json');
+const usersFile = path.join(dataDir, 'users.json');
 async function loadUsers() {
   try {
     const usersData = await fs.readFile(usersFile, 'utf8');
@@ -58,25 +64,26 @@ async function loadModCache() {
     } else {
       console.warn('mods.json content is not an array, initializing as empty.');
       globalCache.mods = [];
-      await fs.writeFile(MODS_CACHE_FILE, JSON.stringify([], null, 2), 'utf8');
+      await fs.writeFile(MODS_CACHE_FILE, JSON.stringify(globalCache.mods, null, 2), 'utf8');
     }
   } catch (err) {
-    console.warn(`mods.json not found or invalid, creating new: ${err.message}`);
-    await fs.writeFile(MODS_CACHE_FILE, JSON.stringify([], null, 2), 'utf8');
+    console.warn(`Failed to load mods.json: ${err.message}. Initializing as empty.`);
+    globalCache.mods = [];
+    await fs.writeFile(MODS_CACHE_FILE, JSON.stringify(globalCache.mods, null, 2), 'utf8');
   }
 }
 
 const PERSONAL_MODS_CACHE_FILE = path.join(dataDir, 'personal_mods.json');
-let personalCache = { mods: [], lastResetDate: new Date().toISOString() };
+let personalCache = { mods: {}, lastResetDate: new Date().toISOString() };
 async function loadPersonalModCache() {
   try {
     const cacheData = await fs.readFile(PERSONAL_MODS_CACHE_FILE, 'utf8');
     const parsedData = JSON.parse(cacheData);
     personalCache = {
-      mods: Array.isArray(parsedData.mods) ? parsedData.mods : [],
+      mods: parsedData.mods && typeof parsedData.mods === 'object' ? parsedData.mods : {},
       lastResetDate: parsedData.lastResetDate || new Date().toISOString(),
     };
-    console.log(`📂 Loaded ${personalCache.mods.length} personal mods from ${PERSONAL_MODS_CACHE_FILE}`);
+    console.log(`📂 Loaded personal mods from ${PERSONAL_MODS_CACHE_FILE}`);
   } catch (err) {
     console.warn(`personal_mods.json not found or invalid, creating new: ${err.message}`);
     await fs.writeFile(PERSONAL_MODS_CACHE_FILE, JSON.stringify(personalCache, null, 2), 'utf8');
@@ -95,7 +102,7 @@ async function saveModCache() {
 
 async function savePersonalModCache() {
   try {
-    console.log(`Attempting to save ${personalCache.mods.length} personal mods to ${PERSONAL_MODS_CACHE_FILE}`);
+    console.log(`Attempting to save personal mods to ${PERSONAL_MODS_CACHE_FILE}`);
     await fs.writeFile(PERSONAL_MODS_CACHE_FILE, JSON.stringify(personalCache, null, 2), 'utf8');
     console.log('💾 Personal mod cache saved to personal_mods.json');
   } catch (err) {
@@ -114,7 +121,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const WELCOME_CHANNEL_ID = '1361849763611541584';
 const MOD_CHANNEL_ID = '1362988156546449598';
 const MESSAGE_ID_KEY = 'REACTION_ROLE_MESSAGE_ID';
-const commandsRegisteredFile = path.join(__dirname, 'commands_registered.txt');
+const commandsRegisteredFile = path.join(dataDir, 'commands_registered.txt');
 
 if (!DISCORD_TOKEN) {
   console.error('❌ DISCORD_TOKEN is not set!');
@@ -133,10 +140,7 @@ if (!NEXUS_AUTHOR_ID) {
   process.exit(1);
 }
 
-const cutoff = new Date();
-cutoff.setUTCHours(0, 0, 0, 0);
-// For testing older mods, uncomment:
-// const cutoff = new Date('2020-01-01');
+const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
 console.log('📅 Using cutoff date:', cutoff.toISOString());
 
 const roleMapping = {
@@ -264,15 +268,14 @@ async function fetchModsFromAPI() {
         console.log(`🔍 Comparing mod date ${modDate.toISOString()} with cutoff ${cutoff.toISOString()}`);
         return modDate >= cutoff;
       })
-      .map(mod => {
-        const timestamp = mod.updated_timestamp || mod.created_timestamp;
-        return {
-          title: mod.name || 'Unnamed Mod',
-          url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-          date: new Date(timestamp * 1000).toISOString(),
-          category: mod.category_name || 'Uncategorized',
-        };
-      });
+      .map(mod => ({
+        title: mod.name || 'Unnamed Mod',
+        url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
+        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
+        category: mod.category_name || 'Uncategorized',
+        version: mod.version || 'Unknown',
+        mod_id: mod.mod_id
+      }));
   } catch (err) {
     console.error('❌ Error fetching mods from API:', err.message);
     return [];
@@ -280,37 +283,15 @@ async function fetchModsFromAPI() {
 }
 
 async function fetchPersonalModsFromAPI() {
-  let mods = [];
-  try {
-    console.log(`📡 Fetching personal mods for user ${NEXUS_AUTHOR_ID} from Nexus API...`);
-    const response = await axios.get(
-      `https://api.nexusmods.com/v1/users/${NEXUS_AUTHOR_ID}/mods.json`,
-      {
-        headers: {
-          apikey: process.env.NEXUS_API_KEY,
-          Accept: 'application/json',
-        },
-      }
-    );
+  const MOD_ID = 11814;
+  const MAX_RETRIES = 3;
+  let attempt = 1;
 
-    if (DEBUG) {
-      console.log('🧪 Full personal mods API response:', JSON.stringify(response.data, null, 2));
-    }
-
-    mods = Array.isArray(response.data) ? response.data : response.data.mods || [];
-    console.log(`ℹ️ Fetched ${mods.length} mods from user endpoint.`);
-  } catch (err) {
-    console.error('❌ Error fetching personal mods from user endpoint:', {
-      message: err.message,
-      status: err.response?.status,
-      data: err.response?.data,
-    });
-
-    // Fallback: Try fetching specific mod (mod_id: 11814)
+  while (attempt <= MAX_RETRIES) {
     try {
-      console.log('📡 Attempting fallback: Fetching mod_id 11814...');
-      const fallbackResponse = await axios.get(
-        `https://api.nexusmods.com/v1/games/${GAME_DOMAIN}/mods/11814.json`,
+      console.log(`📡 Fetching personal mod_id ${MOD_ID} from Nexus API (Attempt ${attempt}/${MAX_RETRIES})...`);
+      const response = await axios.get(
+        `https://api.nexusmods.com/v1/games/${GAME_DOMAIN}/mods/${MOD_ID}.json`,
         {
           headers: {
             apikey: process.env.NEXUS_API_KEY,
@@ -320,65 +301,43 @@ async function fetchPersonalModsFromAPI() {
       );
 
       if (DEBUG) {
-        console.log('🧪 Fallback mod API response:', JSON.stringify(fallbackResponse.data, null, 2));
+        console.log('🧪 Mod API response:', JSON.stringify(response.data, null, 2));
       }
 
-      mods = [fallbackResponse.data];
-      console.log('✅ Fallback successful: Fetched mod_id 11814.');
-    } catch (fallbackErr) {
-      console.error('❌ Fallback fetch for mod_id 11814 failed:', {
-        message: fallbackErr.message,
-        status: fallbackErr.response?.status,
-        data: fallbackErr.response?.data,
-      });
-      return [];
-    }
-  }
-
-  return mods
-    .filter(mod => {
+      const mod = response.data;
       if (mod.status !== 'published' || !mod.available) {
         console.log(`[SKIP] ${mod.name || 'Unnamed'} is not published or available`);
-        return false;
+        return [];
       }
 
       if (process.env.FILTER_NSFW === 'true' && mod.contains_adult_content) {
         console.log(`[SKIP] ${mod.name || 'Unnamed'} is marked NSFW`);
-        return false;
+        return [];
       }
 
-      // Bypass author check for mod_id 11814
-      if (mod.mod_id === 11814) {
-        console.log(`✅ Including mod_id 11814 (BF Poofies)`);
-        return true;
-      }
-
-      // Check author using member_id
-      const authorId = mod.user?.member_id || mod.user?.user_id;
-      if (!authorId || authorId !== parseInt(NEXUS_AUTHOR_ID)) {
-        console.log(`[SKIP] ${mod.name || 'Unnamed'} is not authored by user ${NEXUS_AUTHOR_ID} (found ${authorId})`);
-        return false;
-      }
-
-      const timestamp = mod.updated_timestamp || mod.created_timestamp;
-      if (!timestamp || isNaN(timestamp)) {
-        console.warn(`[SKIP] ${mod.name || 'Unnamed'} has invalid timestamp`);
-        return false;
-      }
-
-      const modDate = new Date(timestamp * 1000);
-      console.log(`🔍 Comparing personal mod date ${modDate.toISOString()} with cutoff ${cutoff.toISOString()}`);
-      return modDate >= cutoff;
-    })
-    .map(mod => {
-      const timestamp = mod.updated_timestamp || mod.created_timestamp;
-      return {
+      console.log(`✅ Including mod_id ${MOD_ID} (${mod.name})`);
+      return [{
         title: mod.name || 'Unnamed Mod',
         url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-        date: new Date(timestamp * 1000).toISOString(),
+        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
         category: mod.category_name || 'Uncategorized',
-      };
-    });
+        version: mod.version || 'Unknown',
+        mod_id: mod.mod_id
+      }];
+    } catch (err) {
+      console.error(`❌ Error fetching mod_id ${MOD_ID} (Attempt ${attempt}/${MAX_RETRIES}):`, {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+      if (attempt === MAX_RETRIES) {
+        console.error(`Max retries reached for mod_id ${MOD_ID}. Skipping.`);
+        return [];
+      }
+      attempt++;
+      await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+    }
+  }
 }
 
 async function sendDiscordNotification(mods, channelId) {
@@ -387,28 +346,41 @@ async function sendDiscordNotification(mods, channelId) {
     return;
   }
 
-  const channel = client.channels.cache.get(channelId);
-  if (!channel || !channel.isTextBased()) {
-    console.error(`❌ Channel not found or not a text channel: ${channelId}`);
+  let channel;
+  try {
+    channel = await client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased()) {
+      console.error(`❌ Channel not found or not a text channel: ${channelId}`);
+      return;
+    }
+  } catch (err) {
+    console.error(`❌ Failed to fetch channel ${channelId}:`, err.message);
+    return;
+  }
+
+  const hasSendPermission = channel.permissionsFor(client.user)?.has('SEND_MESSAGES');
+  if (!hasSendPermission) {
+    console.error(`❌ Bot lacks SEND_MESSAGES permission in channel ${channelId}`);
     return;
   }
 
   for (const mod of mods) {
     const message = `**🛠️ New Mod Update for Star Wars: Battlefront II**\n` +
                     `**Title**: ${mod.title}\n` +
+                    `**Version**: ${mod.version}\n` +
                     `**Date**: ${mod.date}\n` +
                     `**Category**: ${mod.category}\n` +
                     `**Link**: ${mod.url}`;
 
     try {
-      console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title}`);
+      console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title} (v${mod.version})`);
       await channel.send({ content: message });
       console.log(`✅ Successfully sent: ${mod.title}`);
     } catch (err) {
       console.error(`❌ Failed to send "${mod.title}" to Discord channel ${channelId}:`, err.message);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
   }
 }
 
@@ -417,12 +389,12 @@ async function checkForNewMods() {
   try {
     // General mods (API)
     const apiMods = await fetchModsFromAPI();
-    const apiSeen = new Set(globalCache.mods.map(m => m.url));
-    const newApiMods = apiMods.filter(mod => !apiSeen.has(mod.url)).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
+    const newApiMods = apiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`)).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (newApiMods.length) {
       console.log(`✅ Found ${newApiMods.length} new API mods.`);
-      newApiMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+      newApiMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
       await sendDiscordNotification(newApiMods, MOD_UPDATER_CHANNEL_ID);
       newApiMods.forEach(newMod => {
         let inserted = false;
@@ -444,26 +416,25 @@ async function checkForNewMods() {
 
     // Personal mods (API)
     const personalMods = await fetchPersonalModsFromAPI();
-    const personalSeen = new Set(personalCache.mods.map(m => m.url));
-    const allSeen = new Set([...globalCache.mods.map(m => m.url), ...personalCache.mods.map(m => m.url)]);
-    const newPersonalMods = personalMods.filter(mod => !allSeen.has(mod.url)).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const newPersonalMods = [];
+    for (const mod of personalMods) {
+      const cachedMod = personalCache.mods[mod.mod_id] || {};
+      const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
+      const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
+      console.log(`Comparing ${mod.title}: isNewVersion=${isNewVersion}, isNewDate=${isNewDate}, cachedVersion=${cachedMod.version || 'none'}, cachedDate=${cachedMod.date || 'none'}`);
+      if (isNewVersion || isNewDate) {
+        console.log(`New update for ${mod.title}: v${mod.version}, date ${mod.date}`);
+        newPersonalMods.push(mod);
+        personalCache.mods[mod.mod_id] = mod;
+      } else {
+        console.log(`No update for ${mod.title}: v${mod.version}, date ${mod.date}`);
+      }
+    }
 
     if (newPersonalMods.length) {
       console.log(`✅ Found ${newPersonalMods.length} new personal mods.`);
-      newPersonalMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+      newPersonalMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
       await sendDiscordNotification(newPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
-      newPersonalMods.forEach(newMod => {
-        let inserted = false;
-        for (let i = 0; i < personalCache.mods.length; i++) {
-          if (new Date(newMod.date) < new Date(personalCache.mods[i].date)) {
-            personalCache.mods.splice(i, 0, newMod);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) personalCache.mods.push(newMod);
-      });
-      personalCache.mods = personalCache.mods.slice(0, 1000);
       personalCache.lastResetDate = new Date().toISOString();
       await savePersonalModCache();
     } else {
@@ -471,6 +442,7 @@ async function checkForNewMods() {
     }
   } catch (err) {
     console.error('❌ Error in mod check:', err.message);
+    console.error(err.stack);
   }
 }
 
@@ -538,12 +510,12 @@ client.once('ready', async () => {
   try {
     // General mods (API)
     const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const apiSeen = new Set(globalCache.mods.map(m => m.url));
-    const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(mod.url));
+    const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
+    const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
     console.log(`Found ${newInitialApiMods.length} new initial API mods to process.`);
     if (newInitialApiMods.length) {
       console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
-      newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+      newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
       try {
         await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
       } catch (err) {
@@ -569,30 +541,26 @@ client.once('ready', async () => {
 
     // Personal mods (API)
     const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    const personalSeen = new Set(personalCache.mods.map(m => m.url));
-    const allSeen = new Set([...globalCache.mods.map(m => m.url), ...personalCache.mods.map(m => m.url)]);
-    const newInitialPersonalMods = initialPersonalMods.filter(mod => !allSeen.has(mod.url));
+    const newInitialPersonalMods = [];
+    for (const mod of initialPersonalMods) {
+      const cachedMod = personalCache.mods[mod.mod_id] || {};
+      const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
+      const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
+      if (isNewVersion || isNewDate) {
+        newInitialPersonalMods.push(mod);
+        personalCache.mods[mod.mod_id] = mod;
+      }
+    }
+
     console.log(`Found ${newInitialPersonalMods.length} new initial personal mods to process.`);
     if (newInitialPersonalMods.length) {
       console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods.`);
-      newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (${mod.date})`));
+      newInitialPersonalMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
       try {
         await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
       } catch (err) {
         console.error('❌ Error sending initial personal mod notifications:', err.message);
       }
-      newInitialPersonalMods.forEach(newMod => {
-        let inserted = false;
-        for (let i = 0; i < personalCache.mods.length; i++) {
-          if (new Date(newMod.date) < new Date(personalCache.mods[i].date)) {
-            personalCache.mods.splice(i, 0, newMod);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) personalCache.mods.push(newMod);
-      });
-      personalCache.mods = personalCache.mods.slice(0, 1000);
       personalCache.lastResetDate = new Date().toISOString();
       await savePersonalModCache();
     } else {

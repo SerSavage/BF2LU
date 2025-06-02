@@ -269,13 +269,14 @@ async function fetchModsFromAPI() {
         return modDate >= cutoff;
       })
       .map(mod => ({
-        title: mod.name || 'Unnamed Mod',
-        url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
-        category: mod.category_name || 'Uncategorized',
-        version: mod.version || 'Unknown',
-        mod_id: mod.mod_id
-      }));
+  title: mod.name || 'Unnamed Mod',
+  url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
+  date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
+  category: mod.category_name || 'Uncategorized',
+  version: mod.version || 'Unknown',
+  mod_id: mod.mod_id,
+  image: mod.picture_url || null
+}));
   } catch (err) {
     console.error('❌ Error fetching mods from API:', err.message);
     return [];
@@ -317,13 +318,14 @@ async function fetchPersonalModsFromAPI() {
 
       console.log(`✅ Including mod_id ${MOD_ID} (${mod.name})`);
       return [{
-        title: mod.name || 'Unnamed Mod',
-        url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
-        category: mod.category_name || 'Uncategorized',
-        version: mod.version || 'Unknown',
-        mod_id: mod.mod_id
-      }];
+  title: mod.name || 'Unnamed Mod',
+  url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
+  date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
+  category: mod.category_name || 'Uncategorized',
+  version: mod.version || 'Unknown',
+  mod_id: mod.mod_id,
+  image: mod.picture_url || null
+}];
     } catch (err) {
       console.error(`❌ Error fetching mod_id ${MOD_ID} (Attempt ${attempt}/${MAX_RETRIES}):`, {
         message: err.message,
@@ -366,12 +368,15 @@ async function sendDiscordNotification(mods, channelId) {
 
   for (const mod of mods) {
     const embed = new EmbedBuilder()
-      .setTitle(`🛠️ New Mod Update: ${mod.title}`)
-      .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
-      .setImage(mod.picture_url || '') // Add the mod image if available
-      .setColor('#00FF00') // Green for success
-      .setFooter({ text: 'Star Wars: Battlefront II Mods' })
-      .setTimestamp();
+  .setTitle(`🛠️ New Mod Update: ${mod.title}`)
+  .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
+  .setColor('#00FF00')
+  .setFooter({ text: 'Star Wars: Battlefront II Mods' })
+  .setTimestamp();
+
+if (mod.image) {
+  embed.setThumbnail(mod.image);
+}
 
     try {
       console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title} (v${mod.version})`);

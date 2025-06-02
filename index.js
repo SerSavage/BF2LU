@@ -5,7 +5,7 @@ const axios = require('axios');
 const express = require('express');
 require('dotenv').config();
 
-const dataDir = '/tmp'; // Use /tmp for writable filesystem
+const dataDir = '/app/data'; // Use /RenderDisk for writable filesystem
 try {
   if (!require('fs').existsSync(dataDir)) {
     require('fs').mkdirSync(dataDir, { recursive: true });
@@ -630,10 +630,14 @@ async function saveSWCache() {
 }
 
 async function scrapeSWArticles() {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  const chromium = require('@sparticuz/chromium');
+
+const browser = await puppeteer.launch({
+  args: chromium.args,
+  defaultViewport: chromium.defaultViewport,
+  executablePath: await chromium.executablePath(),
+  headless: chromium.headless,
+});
   const page = await browser.newPage();
   await page.setJavaScriptEnabled(false);
   await page.goto(SW_URL, { waitUntil: 'domcontentloaded' });

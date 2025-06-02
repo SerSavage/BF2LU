@@ -640,6 +640,7 @@ const browser = await puppeteer.launch({
 });
   const page = await browser.newPage();
   await page.setJavaScriptEnabled(false);
+  console.log(`🌐 Visiting ${SW_URL}...`);
   await page.goto(SW_URL, { waitUntil: 'domcontentloaded' });
 
   const articles = await page.evaluate(() => {
@@ -664,12 +665,50 @@ const browser = await puppeteer.launch({
   });
 
   await browser.close();
+console.log(`✅ Extracted ${articles.length} articles.`);
   return articles;
 }
 
 async function checkSWUpdates() {
-  await loadSWCache();
-  const fresh = await scrapeSWArticles();
+  console.log('🔎 Checking for new Star Wars NewsNet articles...');
+  try {
+    await loadSWCache();
+    const fresh = await scrapeSWArticles();
+
+    if (!Array.isArray(fresh)) {
+      console.warn('⚠️ scrapeSWArticles() did not return an array. Skipping.');
+      return;
+    }
+
+    const newArticles = fresh.filter(a => !swCache.find(c => c.url === a.url));
+    if (!newArticles.length) {
+      console.log('📰 No new Star Wars articles found.');
+      return;
+    }
+
+    const channel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
+      console.error('❌ Failed to fetch SW_CHANNEL_ID:', err.message);
+      return null;
+    });
+    if (!channel || !channel.isTextBased()) {
+      console.error('❌ Invalid SW Discord channel or not text-based.');
+      return;
+    }
+
+    for (const article of newArticles) {
+      const msg = `📰 **New Star Wars Article**\n**Title**: ${article.title}\n**Date**: ${article.date}\n**Link**: ${article.url}`;
+      await channel.send({ content: msg }).catch(console.error);
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    swCache = [...newArticles, ...swCache];
+    await saveSWCache();
+    console.log(`✅ Posted ${newArticles.length} new articles to Discord.`);
+  } catch (err) {
+    console.error('❌ Error during checkSWUpdates():', err);
+  }
+}
+
   const newArticles = fresh.filter(a => !swCache.find(c => c.url === a.url));
   if (!newArticles.length) {
     console.log('📰 No new Star Wars articles found.');

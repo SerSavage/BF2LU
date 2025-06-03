@@ -2,10 +2,12 @@ const { Client, GatewayIntentBits, AttachmentBuilder, REST, Routes, EmbedBuilder
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
-const express = require('express');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 require('dotenv').config();
 
-const dataDir = '/app/data'; // Use /RenderDisk for writable filesystem
+const dataDir = '/app/data';
 try {
   if (!require('fs').existsSync(dataDir)) {
     require('fs').mkdirSync(dataDir, { recursive: true });
@@ -13,19 +15,8 @@ try {
   }
 } catch (err) {
   console.error(`❌ Failed to create/check directory ${dataDir}:`, err.message);
-  process.exit(1); // Exit if /tmp isn’t writable
+  process.exit(1);
 }
-
-const app = express();
-const port = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-  res.send('Bot is running!');
-});
-
-app.listen(port, () => {
-  console.log(`Express server listening on port ${port}`);
-});
 
 const client = new Client({
   intents: [
@@ -122,6 +113,10 @@ const WELCOME_CHANNEL_ID = '1361849763611541584';
 const MOD_CHANNEL_ID = '1362988156546449598';
 const MESSAGE_ID_KEY = 'REACTION_ROLE_MESSAGE_ID';
 const commandsRegisteredFile = path.join(dataDir, 'commands_registered.txt');
+const SW_CACHE_FILE = path.join(dataDir, 'sw_articles.json');
+const NEWS_CATEGORY = 'star-wars';
+const SW_URL = `https://www.starwarsnewsnet.com/category/${NEWS_CATEGORY}`;
+const SW_CHANNEL_ID = process.env.DISCORD_SW_CHANNEL_ID;
 
 if (!DISCORD_TOKEN) {
   console.error('❌ DISCORD_TOKEN is not set!');
@@ -139,8 +134,12 @@ if (!NEXUS_AUTHOR_ID) {
   console.error('❌ NEXUS_AUTHOR_ID is not set!');
   process.exit(1);
 }
+if (!SW_CHANNEL_ID) {
+  console.error('❌ DISCORD_SW_CHANNEL_ID is not set!');
+  process.exit(1);
+}
 
-const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 console.log('📅 Using cutoff date:', cutoff.toISOString());
 
 const roleMapping = {
@@ -269,14 +268,14 @@ async function fetchModsFromAPI() {
         return modDate >= cutoff;
       })
       .map(mod => ({
-  title: mod.name || 'Unnamed Mod',
-  url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-  date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
-  category: mod.category_name || 'Uncategorized',
-  version: mod.version || 'Unknown',
-  mod_id: mod.mod_id,
-  image: mod.picture_url || null
-}));
+        title: mod.name || 'Unnamed Mod',
+        url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
+        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
+        category: mod.category_name || 'Uncategorized',
+        version: mod.version || 'Unknown',
+        mod_id: mod.mod_id,
+        image: mod.picture_url || null
+      }));
   } catch (err) {
     console.error('❌ Error fetching mods from API:', err.message);
     return [];
@@ -318,14 +317,14 @@ async function fetchPersonalModsFromAPI() {
 
       console.log(`✅ Including mod_id ${MOD_ID} (${mod.name})`);
       return [{
-  title: mod.name || 'Unnamed Mod',
-  url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
-  date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
-  category: mod.category_name || 'Uncategorized',
-  version: mod.version || 'Unknown',
-  mod_id: mod.mod_id,
-  image: mod.picture_url || null
-}];
+        title: mod.name || 'Unnamed Mod',
+        url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
+        date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
+        category: mod.category_name || 'Uncategorized',
+        version: mod.version || 'Unknown',
+        mod_id: mod.mod_id,
+        image: mod.picture_url || null
+      }];
     } catch (err) {
       console.error(`❌ Error fetching mod_id ${MOD_ID} (Attempt ${attempt}/${MAX_RETRIES}):`, {
         message: err.message,
@@ -368,15 +367,15 @@ async function sendDiscordNotification(mods, channelId) {
 
   for (const mod of mods) {
     const embed = new EmbedBuilder()
-  .setTitle(`🛠️ New Mod Update: ${mod.title}`)
-  .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
-  .setColor('#00FF00')
-  .setFooter({ text: 'Star Wars: Battlefront II Mods' })
-  .setTimestamp();
+      .setTitle(`🛠️ New Mod Update: ${mod.title}`)
+      .setDescription(`**Version**: ${mod.version}\n**Date**: ${mod.date}\n**Category**: ${mod.category}\n[Download](${mod.url})`)
+      .setColor('#00FF00')
+      .setFooter({ text: 'Star Wars: Battlefront II Mods' })
+      .setTimestamp();
 
-if (mod.image) {
-  embed.setImage(mod.image);
-}
+    if (mod.image) {
+      embed.setImage(mod.image);
+    }
 
     try {
       console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title} (v${mod.version})`);
@@ -393,10 +392,9 @@ if (mod.image) {
 async function checkForNewMods() {
   console.log('🔎 Checking for new mods...');
   try {
-    // General mods (API)
     const apiMods = await fetchModsFromAPI();
     const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
-    const newApiMods = apiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`)).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const newApiMods = apiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${m.version}`)).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (newApiMods.length) {
       console.log(`✅ Found ${newApiMods.length} new API mods.`);
@@ -420,7 +418,6 @@ async function checkForNewMods() {
       console.log('ℹ️ No new API mods found.');
     }
 
-    // Personal mods (API)
     const personalMods = await fetchPersonalModsFromAPI();
     const newPersonalMods = [];
     for (const mod of personalMods) {
@@ -449,6 +446,104 @@ async function checkForNewMods() {
   } catch (err) {
     console.error('❌ Error in mod check:', err.message);
     console.error(err.stack);
+  }
+}
+
+let swCache = [];
+async function loadSWCache() {
+  try {
+    const data = await fs.readFile(SW_CACHE_FILE, 'utf8');
+    swCache = JSON.parse(data);
+    console.log(`📰 Loaded Star Wars articles from cache (${swCache.length})`);
+  } catch {
+    swCache = [];
+    await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache), 'utf8');
+  }
+}
+
+async function saveSWCache() {
+  await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache.slice(0, 100), null, 2), 'utf8');
+}
+
+async function scrapeSWArticles() {
+  const chromium = require('@sparticuz/chromium');
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+  const page = await browser.newPage();
+  await page.setJavaScriptEnabled(false);
+  console.log(`🌐 Visiting ${SW_URL}...`);
+  await page.goto(SW_URL, { waitUntil: 'domcontentloaded' });
+
+  const articles = await page.evaluate(() => {
+    const entries = [];
+    const seen = new Set();
+    const elements = document.querySelectorAll('article');
+    for (const el of elements) {
+      const titleEl = el.querySelector('h2.entry-title a');
+      const timeEl = el.querySelector('time.entry-date');
+      const title = titleEl?.textContent?.trim();
+      let url = titleEl?.href?.trim();
+      const date = timeEl?.getAttribute('datetime') || 'Unknown';
+      if (title && url && !seen.has(url)) {
+        seen.add(url);
+        if (!url.startsWith('http')) {
+          url = 'https://www.starwarsnewsnet.com' + (url.startsWith('/') ? url : '/' + url);
+        }
+        entries.push({ title, url, date });
+      }
+    }
+    return entries;
+  });
+
+  await browser.close();
+  console.log(`✅ Extracted ${articles.length} articles.`);
+  return articles;
+}
+
+async function checkSWUpdates() {
+  console.log('🔎 Checking for new Star Wars NewsNet articles...');
+  try {
+    await loadSWCache();
+    const fresh = await scrapeSWArticles();
+
+    if (!Array.isArray(fresh)) {
+      console.warn('⚠️ scrapeSWArticles() did not return an array. Skipping.');
+      return;
+    }
+
+    const swChannel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
+      console.error('❌ Failed to fetch SW_CHANNEL_ID:', err.message);
+      return null;
+    });
+
+    if (!swChannel || !swChannel.isTextBased()) {
+      console.error('❌ Invalid SW Discord channel or not text-based.');
+      return;
+    }
+
+    const newArticles = fresh.filter(article => !swCache.some(cached => cached.url === article.url));
+    newArticles.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (!newArticles.length) {
+      console.log('📰 No new Star Wars articles found.');
+      return;
+    }
+
+    for (const article of newArticles) {
+      const msg = `📰 **New Star Wars Article**\n**Title**: ${article.title}\n**Date**: ${article.date}\n**Link**: ${article.url}`;
+      await swChannel.send({ content: msg }).catch(console.error);
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    swCache = [...newArticles, ...swCache];
+    await saveSWCache();
+    console.log(`✅ Posted ${newArticles.length} new articles to Discord.`);
+  } catch (err) {
+    console.error('❌ Error during checkSWUpdates():', err);
   }
 }
 
@@ -507,12 +602,11 @@ client.once('ready', async () => {
       for (const emojiId of Object.keys(roleMapping)) {
         await message.react(emojiId).catch(console.error);
       }
-} catch (error) {
+    } catch (error) {
       console.error('Error posting new embed:', error.message);
     }
   }
 
-// Simulate initial post for BF Poofies (mod_id 11814) as of April 30, 2025
   const initialModId = 11814;
   const initialDate = new Date('2025-04-30T00:00:00.000Z');
   if (!personalCache.mods[initialModId]) {
@@ -544,7 +638,6 @@ client.once('ready', async () => {
     console.log(`ℹ️ Initial post for BF Poofies (mod_id ${initialModId}) already exists, skipping.`);
   }
 
-  // Only perform initial mod check if cache is empty or outdated
   const lastChecked = new Date(globalCache.lastChecked);
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   if (isNaN(lastChecked) || lastChecked < oneDayAgo) {
@@ -552,7 +645,7 @@ client.once('ready', async () => {
     try {
       const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
       const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
-      const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
+      const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${m.version}`));
       if (newInitialApiMods.length) {
         console.log(`✅ Found ${newInitialApiMods.length} new initial API mods.`);
         newInitialApiMods.forEach(mod => console.log(`→ ${mod.title} (v${mod.version}, ${mod.date})`));
@@ -602,124 +695,8 @@ client.once('ready', async () => {
     console.log('🔎 Skipping initial mod check: Cache is recent (last checked:', globalCache.lastChecked, ')');
   }
 
-// === Star Wars News Scraper Integration ===
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
-
-const NEWS_CATEGORY = 'star-wars';
-const SW_CACHE_FILE = path.join(dataDir, 'sw_articles.json');
-const SW_URL = `https://www.starwarsnewsnet.com/category/${NEWS_CATEGORY}`;
-const SW_CHANNEL_ID = process.env.DISCORD_SW_CHANNEL_ID; // ← Set this in .env
-
-let swCache = [];
-
-async function loadSWCache() {
-  try {
-    const data = await fs.readFile(SW_CACHE_FILE, 'utf8');
-    swCache = JSON.parse(data);
-    console.log(`📰 Loaded Star Wars articles from cache (${swCache.length})`);
-  } catch {
-    swCache = [];
-    await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache), 'utf8');
-  }
-}
-
-async function saveSWCache() {
-  await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache.slice(0, 100), null, 2), 'utf8');
-}
-
-async function scrapeSWArticles() {
-  const chromium = require('@sparticuz/chromium');
-
-const browser = await puppeteer.launch({
-  args: chromium.args,
-  defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath(),
-  headless: chromium.headless,
-});
-  const page = await browser.newPage();
-  await page.setJavaScriptEnabled(false);
-  console.log(`🌐 Visiting ${SW_URL}...`);
-  await page.goto(SW_URL, { waitUntil: 'domcontentloaded' });
-
-  const articles = await page.evaluate(() => {
-    const entries = [];
-    const seen = new Set();
-    const elements = document.querySelectorAll('article');
-    for (const el of elements) {
-      const titleEl = el.querySelector('h2.entry-title a');
-      const timeEl = el.querySelector('time.entry-date');
-      const title = titleEl?.textContent?.trim();
-      let url = titleEl?.href?.trim();
-      const date = timeEl?.getAttribute('datetime') || 'Unknown';
-      if (title && url && !seen.has(url)) {
-        seen.add(url);
-        if (!url.startsWith('http')) {
-          url = 'https://www.starwarsnewsnet.com' + (url.startsWith('/') ? url : '/' + url);
-        }
-        entries.push({ title, url, date });
-      }
-    }
-    return entries;
-  });
-
-  await browser.close();
-console.log(`✅ Extracted ${articles.length} articles.`);
-  return articles;
-}
-
-async function checkSWUpdates() {
-  console.log('🔎 Checking for new Star Wars NewsNet articles...');
-  try {
-    await loadSWCache();
-    const fresh = await scrapeSWArticles();
-
-    if (!Array.isArray(fresh)) {
-      console.warn('⚠️ scrapeSWArticles() did not return an array. Skipping.');
-      return;
-    }
-
-    const swChannel = await client.channels.fetch(SW_CHANNEL_ID).catch(err => {
-      console.error('❌ Failed to fetch SW_CHANNEL_ID:', err.message);
-      return null;
-    });
-
-    if (!swChannel || !swChannel.isTextBased()) {
-      console.error('❌ Invalid SW Discord channel or not text-based.');
-      return;
-    }
-
-    const newArticles = fresh.filter(article => !swCache.some(cached => cached.url === article.url));
-    
-    // Sort new articles by date in ascending order (oldest first)
-    newArticles.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    if (!newArticles.length) {
-      console.log('📰 No new Star Wars articles found.');
-      return;
-    }
-
-    for (const article of newArticles) {
-      const msg = `📰 **New Star Wars Article**\n**Title**: ${article.title}\n**Date**: ${article.date}\n**Link**: ${article.url}`;
-      await swChannel.send({ content: msg }).catch(console.error);
-      await new Promise(r => setTimeout(r, 1500));
-    }
-
-    swCache = [...newArticles, ...swCache];
-    await saveSWCache();
-    console.log(`✅ Posted ${newArticles.length} new articles to Discord.`);
-  } catch (err) {
-    console.error('❌ Error during checkSWUpdates():', err);
-  }
-}
-
-// Start the Star Wars news monitor
-setInterval(checkSWUpdates, 30 * 60 * 1000); // Every 30 minutes
-
-
-  // Start polling loop
-  setInterval(checkForNewMods, 10 * 60 * 1000); // Every 10 minutes
+  setInterval(checkSWUpdates, 30 * 60 * 1000);
+  setInterval(checkForNewMods, 10 * 60 * 1000);
 });
 
 client.on('messageCreate', async (message) => {
@@ -788,7 +765,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (message.content.startsWith('!setlang ')) {
+  if (content.startsWith('!setlang ')) {
     const parts = message.content.trim().split(' ');
     const lang = parts[1]?.toLowerCase();
 

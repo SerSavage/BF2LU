@@ -5,7 +5,7 @@
     "options": [
       {
         "name": "language",
-        "description": "The language code (e.g., en, es, fr)",
+        "description": "The language code (e.g., en, fr, es)",
         "type": 3,
         "required": true
       }
@@ -13,7 +13,7 @@
   },
   {
     "name": "translate",
-    "description": "Translate text to a specified or preferred language",
+    "description": "Translate text to a specified language or your preferred language",
     "options": [
       {
         "name": "text",
@@ -23,7 +23,7 @@
       },
       {
         "name": "language",
-        "description": "The target language code (optional)",
+        "description": "Target language code (optional, defaults to your preferred language)",
         "type": 3,
         "required": false
       }
@@ -31,6 +31,7 @@
   },
   {
     "name": "translate_message",
-    "type": 3
+    "type": 3,
+    "description": "Translate a message to your preferred language"
   }
 ]

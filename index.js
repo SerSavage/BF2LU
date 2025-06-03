@@ -691,6 +691,9 @@ async function checkSWUpdates() {
     }
 
     const newArticles = fresh.filter(article => !swCache.some(cached => cached.url === article.url));
+    
+    // Sort new articles by date in ascending order (oldest first)
+    newArticles.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (!newArticles.length) {
       console.log('📰 No new Star Wars articles found.');

@@ -218,6 +218,9 @@ async function registerCommands() {
   }
 }
 
+const cutoff = globalCache.lastChecked ? new Date(globalCache.lastChecked) : new Date();
+console.log('📅 Using cutoff date (mods newer than this will be included):', cutoff.toISOString());
+
 async function fetchModsFromAPI() {
   try {
     console.log('📡 Fetching mods from Nexus API...');
@@ -255,8 +258,8 @@ async function fetchModsFromAPI() {
         }
 
         const modDate = new Date(timestamp * 1000);
-        console.log(`🔍 Mod: ${mod.name}, Date: ${modDate.toISOString()}`);
-        return true; // No cutoff, include all valid mods
+        console.log(`🔍 Mod: ${mod.name}, Date: ${modDate.toISOString()}, Cutoff: ${cutoff.toISOString()}, Included: ${modDate > cutoff}`);
+        return modDate > cutoff; // Include mods NEWER than cutoff
       })
       .map(mod => ({
         title: mod.name || 'Unnamed Mod',

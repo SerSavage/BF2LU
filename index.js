@@ -231,11 +231,12 @@ async function fetchModsFromAPI() {
       }
     );
 
+    console.log(`📡 Fetched ${response.data.length} mods from Nexus API`);
     if (DEBUG) {
       console.log('🧪 Full API response:', JSON.stringify(response.data, null, 2));
     }
 
-    return response.data
+    const filteredMods = response.data
       .filter(mod => {
         if (mod.status !== 'published' || !mod.available) {
           console.log(`[SKIP] ${mod.name || 'Unnamed'} is not published or available`);
@@ -254,8 +255,8 @@ async function fetchModsFromAPI() {
         }
 
         const modDate = new Date(timestamp * 1000);
-        console.log(`🔍 Comparing mod date ${modDate.toISOString()} with cutoff ${cutoff.toISOString()}`);
-        return modDate >= cutoff;
+        console.log(`🔍 Mod: ${mod.name}, Date: ${modDate.toISOString()}`);
+        return true; // No cutoff, include all valid mods
       })
       .map(mod => ({
         title: mod.name || 'Unnamed Mod',
@@ -266,6 +267,8 @@ async function fetchModsFromAPI() {
         mod_id: mod.mod_id,
         image: mod.picture_url || null
       }));
+    console.log(`📡 After filtering: ${filteredMods.length} mods remain`);
+    return filteredMods;
   } catch (err) {
     console.error('❌ Error fetching mods from API:', err.message);
     return [];

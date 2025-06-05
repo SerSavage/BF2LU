@@ -258,9 +258,9 @@ async function fetchModsFromAPI() {
         url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${mod.mod_id}`,
         date: new Date((mod.updated_timestamp || mod.created_timestamp) * 1000).toISOString(),
         category: mod.category_name || 'Uncategorized',
-        version: mod.version || 'unknown',
+        version: mod.version || 'Unknown',
         mod_id: mod.mod_id,
-        image: mod.logo_url || null
+        image: mod.picture_url || null
       }));
     console.log(`📡 After filtering: ${filteredMods.length} mods remain`);
     return filteredMods;
@@ -437,14 +437,14 @@ async function loadSWCache() {
     console.log(`📰 Loaded Star Wars articles from cache (${swCache.length})`);
   } catch {
     swCache = [];
-    await fs.write(SW_CACHE_FILE, JSON.stringify(swCache), '');
+    await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache), 'utf8');
     console.log('🗑️ Created new Star Wars cache file');
   }
 }
 
 async function saveSWCache() {
   await fs.writeFile(SW_CACHE_FILE, JSON.stringify(swCache.slice(0, 100), null, 2), 'utf8');
- console.log('💾 Saved Star Wars cache');
+  console.log('💾 Saved Star Wars cache');
 }
 
 async function scrapeSWArticles() {
@@ -521,151 +521,151 @@ async function checkSWUpdates() {
 }
 
 client.once('ready', async () => {
- console.log(`🚀 Logged in as ${client.user.tag}`);
- await loadUsers();
- await loadModCache();
- await loadPersonalModCache();
- await registerCommands();
- const channel = client.channels.cache.get(WELCOME_CHANNEL_ID);
- if (!channel) {
-   console.error('❌ Welcome channel not found:', WELCOME_CHANNEL_ID);
-   return;
- }
- const embed = new EmbedBuilder()
-   .setTitle('The strongest stars have hearts of kyber.')
-   .setDescription(
-     'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n\n' +
-     Object.keys(roleMapping)
-       .map(emojiId => {
-         const emoji = client.emojis.cache.get(emojiId);
-         return emoji ? `<:${emoji.name}:${emojiId}> ${emoji.name}` : '';
-       })
-       .filter(line => line)
-       .join('\n')
-   )
-   .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' })
-   .setColor('#FFD700');
- let message;
- const messageId = process.env[MESSAGE_ID_KEY];
- if (messageId) {
-   try {
-     message = await channel.messages.fetch(messageId);
-     console.log('📬 Found existing message:', messageId);
-     if (message.embeds.length === 0 || message.embeds[0].title !== embed.data.title) {
-       console.log('⚠️ Existing message is not the expected embed, creating new one');
-       message = null;
-     }
-   } catch (err) {
-     console.error('❌ Error fetching message:', err.message);
-   }
- } else {
-   console.log('ℹ️ No message ID provided in environment variables');
- }
- if (!message) {
-   try {
-     message = await channel.send({ embeds: [embed] });
-     console.log(`📬 New message posted with ID: ${message.id}`);
-     console.log('Please update REACTION_ROLE_MESSAGE_ID in Render environment variables with:', message.id);
-     for (const emojiId of Object.keys(roleMapping)) {
-       await message.react(emojiId).catch(console.error);
-     }
-   } catch (err) {
-     console.error('❌ Error posting new embed:', err.message);
-   }
- }
- const initialModId = 11814;
- const initialDate = new Date('2025-04-20T00:00:00Z');
- if (!personalCache.mods[initialModId]) {
-   console.log(`📢 Simulating initial post for BF Poofies (mod_id ${initialModId}) on ${initialDate.toISOString()}`);
-   const initialMod = {
-     title: 'BF Poofies',
-     url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${initialModId}`,
-     date: initialDate.toISOString(),
-     category: 'Customization',
-     version: '1.0.0',
-     mod_id: initialModId
-   };
-   personalCache.mods[initialModId] = initialMod;
-   personalCache.lastResetDate = initialDate.toISOString();
-   await savePersonalModCache();
-   const personalChannel = await client.channels.fetch(PERSONAL_NEXUS_CHANNEL_ID);
-   if (personalChannel && personalChannel.isTextBased()) {
-     const embed = new EmbedBuilder()
-       .setTitle(`🛠 Initial Post: ${initialMod.title}`)
-       .setDescription(`🎮 Version: ${initialMod.version}\n📅 Date: ${initialDate.toISOString()}\n📚 Category: ${initialMod.category}\n🔗 [Download](${initialMod.url})`)       .map()
-         .setColor('#00FF00')
-         .setFooter({ text: 'Star Wars: Battlefront II Mods' })
-         .setTimestamp();
-       await personalChannel.send({ embeds: [embed] });
-       console.log(`✅ Sent initial post for ${initialMod.title} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
-     }
-   } else {
-     console.log(`ℹ️ Initial post for BF Poofies (mod_id: ${initialModId}) already exists, skipping`);
-   }
- const lastChecked = new Date(globalCache.lastChecked);
-   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-   if (isNaN(lastChecked) || lastChecked < oneDayAgo) {
-     console.log('🔍 Performing initial mod check and sort since cache is empty or outdated');
-     try {
-       const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-       const apiSeen = new Set(globalCacheApiMods.map(m => `${m.mod_id}:${m.version_id}`));
-       const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
-       if (newInitialApiMods.length) {
-         console.log(`✅ Found ${newInitialApiMods.length} new initial API mods`);
-         newInitialApiMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
-         await sendDiscordNotification(newInitialApiMods, MOD_UPDATED_CHANNEL_ID);
-         newApiInitialMods.forEach(newMod => {
-           let inserted = false;
-           for (let i = 0; i <= globalCache.mods.length; i++) {
-             if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
-               globalCache.mods.splice(i, 0, newMod);
-               inserted = true; break;
-             }
-           }
-           if (!inserted) globalCache.mods.push(newMod);
-           });
-         }
-         globalCache.mods = globalCache.mods.slice(0, 100000);
-         globalCache.lastChecked = new Date().toISOString();
-         await saveModCache();
-         } else {
-         console.log('ℹ No new initial API mods found');
-         } else {
-         console.log('ℹ No new initial API mods');
-         }
-         const initialPersonalMods = await fetchPersonalModsFromAPI().then((mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
-         const newInitialPersonalMods = [];
-         for (const mod of initialPersonalmods) {
-           const cachedMod = personalCachePersonalmods[mod.mod_id] || {};
-           const isNewVersion = !cachedMod.version || cachedMod.version === mod.version;
-           const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
-           if (isNewVersion || isNewDate) {
-             newInitialPersonalMods.push(mod);
-             personalCache.mods[mod.mod_id] = mod;
-           } else {
-           console.log(`No update for ${mod.title} (v${mod.version}, ${mod.date})`);
-           }
-         }
-         if (newInitialPersonalMods.length) {
-           console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods`);
-           newInitialPersonalMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
-           await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
-           console.log(`✅ Sent ${newInitialPersonalMods.length} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
-           personalCache.lastResetDate = new Date().toISOString();
-           await savePersonalModCache();
-         } else {
-           console.log('ℹ No new personal mods found');
-         }
-         } catch (err) {
-         console.error('❌ Error during initial mod fetch:', err.message);
-         } else {
-         console.log('ℹ Skipped initial mod check: Cache is recent (last checked:', globalCache.lastChecked, ')');
-         }
-       }
-     setInterval(checkSWUpdates, 5 * 60 * 1000);
-     setInterval(checkForNewMods, 5 * 60 * 1000);
-     ```
-   });
+  console.log(`🚀 Logged in as ${client.user.tag}`);
+  await loadUsers();
+  await loadModCache();
+  await loadPersonalModCache();
+  await registerCommands();
+
+  const channel = client.channels.cache.get(WELCOME_CHANNEL_ID);
+  if (!channel) {
+    console.error('❌ Welcome channel not found:', WELCOME_CHANNEL_ID);
+    return;
+  }
+  const embed = new EmbedBuilder()
+    .setTitle('The strongest stars have hearts of kyber.')
+    .setDescription(
+      'Across the galaxy, every warrior channels the Force through a crystal attuned to their essence.\n\n' +
+      Object.keys(roleMapping)
+        .map(emojiId => {
+          const emoji = client.emojis.cache.get(emojiId);
+          return emoji ? `<:${emoji.name}:${emojiId}> ${emoji.name}` : '';
+        })
+        .filter(line => line)
+        .join('\n')
+    )
+    .setFooter({ text: 'React to claim your role (only one role allowed at a time)!' })
+    .setColor('#FFD700');
+  let message;
+  const messageId = process.env[MESSAGE_ID_KEY];
+  if (messageId) {
+    try {
+      message = await channel.messages.fetch(messageId);
+      console.log('📬 Found existing message:', messageId);
+      if (message.embeds.length === 0 || message.embeds[0].title !== embed.data.title) {
+        console.log('⚠️ Existing message is not the expected embed, creating new one');
+        message = null;
+      }
+    } catch (err) {
+      console.error('❌ Error fetching message:', err.message);
+    }
+  } else {
+    console.log('ℹ️ No message ID provided in environment variables');
+  }
+  if (!message) {
+    try {
+      message = await channel.send({ embeds: [embed] });
+      console.log(`📬 New message posted with ID: ${message.id}`);
+      console.log('Please update REACTION_ROLE_MESSAGE_ID in Render environment variables with:', message.id);
+      for (const emojiId of Object.keys(roleMapping)) {
+        await message.react(emojiId).catch(console.error);
+      }
+    } catch (err) {
+      console.error('❌ Error posting new embed:', err.message);
+    }
+  }
+
+  const initialModId = 11814;
+  const initialDate = new Date('2025-04-20T00:00:00Z');
+  if (!personalCache.mods[initialModId]) {
+    console.log(`📢 Simulating initial post for BF Poofies (mod_id ${initialModId}) on ${initialDate.toISOString()}`);
+    const initialMod = {
+      title: 'BF Poofies',
+      url: `https://www.nexusmods.com/${GAME_DOMAIN}/mods/${initialModId}`,
+      date: initialDate.toISOString(),
+      category: 'Customization',
+      version: '1.0.0',
+      mod_id: initialModId
+    };
+    personalCache.mods[initialModId] = initialMod;
+    personalCache.lastResetDate = initialDate.toISOString();
+    await savePersonalModCache();
+    const personalChannel = await client.channels.fetch(PERSONAL_NEXUS_CHANNEL_ID);
+    if (personalChannel && personalChannel.isTextBased()) {
+      const embed = new EmbedBuilder()
+        .setTitle(`🛠️ Initial Post: ${initialMod.title}`)
+        .setDescription(`🎮 Version: ${initialMod.version}\n📅 Date: ${initialDate.toISOString()}\n📚 Category: ${initialMod.category}\n🔗 [Download](${initialMod.url})`)
+        .setColor('#00FF00')
+        .setFooter({ text: 'Star Wars: Battlefront II Mods' })
+        .setTimestamp();
+      await personalChannel.send({ embeds: [embed] });
+      console.log(`✅ Sent initial post for ${initialMod.title} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
+    }
+  } else {
+    console.log(`ℹ️ Initial post for BF Poofies (mod_id: ${initialModId}) already exists, skipping`);
+  }
+
+  const lastChecked = new Date(globalCache.lastChecked);
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  if (isNaN(lastChecked) || lastChecked < oneDayAgo) {
+    console.log('🔍 Performing initial mod check and sort since cache is empty or outdated');
+    try {
+      const initialApiMods = await fetchModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
+      const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
+      if (newInitialApiMods.length) {
+        console.log(`✅ Found ${newInitialApiMods.length} new initial API mods`);
+        newInitialApiMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
+        await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
+        newInitialApiMods.forEach(newMod => {
+          let inserted = false;
+          for (let i = 0; i < globalCache.mods.length; i++) {
+            if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
+              globalCache.mods.splice(i, 0, newMod);
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) globalCache.mods.push(newMod);
+        });
+        globalCache.mods = globalCache.mods.slice(0, 100000);
+        globalCache.lastChecked = new Date().toISOString();
+        await saveModCache();
+      } else {
+        console.log('ℹ️ No new initial API mods found');
+      }
+
+      const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      const newInitialPersonalMods = [];
+      for (const mod of initialPersonalMods) {
+        const cachedMod = personalCache.mods[mod.mod_id] || {};
+        const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
+        const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
+        if (isNewVersion || isNewDate) {
+          newInitialPersonalMods.push(mod);
+          personalCache.mods[mod.mod_id] = mod;
+        }
+      }
+      if (newInitialPersonalMods.length) {
+        console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods`);
+        newInitialPersonalMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
+        await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
+        console.log(`✅ Sent ${newInitialPersonalMods.length} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
+        personalCache.lastResetDate = new Date().toISOString();
+        await savePersonalModCache();
+      } else {
+        console.log('ℹ️ No new initial personal mods found');
+      }
+    } catch (err) {
+      console.error('❌ Error during initial mod fetch:', err.message);
+    }
+  } else {
+    console.log(`ℹ️ Skipped initial mod check: Cache is recent (last checked: ${globalCache.lastChecked})`);
+  }
+
+  setInterval(checkSWUpdates, 5 * 60 * 1000);
+  setInterval(checkForNewMods, 5 * 60 * 1000);
+});
 
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
@@ -683,7 +683,7 @@ client.on('messageCreate', async (message) => {
           content: `🚨 **EXTREME CONTENT DETECTED**\n🔗 **User:** <@${message.author.id}**\n🗑 **Message Deleted**\n📍 **Channel:** <#${channel.id}>`
         });
       }
-      if (fs.existsSync(gifPath)) {
+      if (require('fs').existsSync(gifPath)) {
         const gifFile = new AttachmentBuilder(gifPath);
         await channel.send({
           content: `⚠️ Inappropriate content detected. A moderator has been notified.`,
@@ -701,7 +701,7 @@ client.on('messageCreate', async (message) => {
   if (targetChannels.includes(message.channel.id)) {
     if (triggers.some(trigger => content.includes(trigger))) {
       const filePath = './audio/cringe.mp3';
-      if (fs.existsSync(filePath)) {
+      if (require('fs').existsSync(filePath)) {
         const audioFile = new AttachmentBuilder(filePath);
         await message.channel.send({
           content: '🔊 Cringe detected!',

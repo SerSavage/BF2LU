@@ -373,7 +373,7 @@ async function sendDiscordNotification(mods, channelId) {
     try {
       console.log(`📤 Sending to Discord channel ${channelId}: ${mod.title} (v${mod.version})`);
       await channel.send({ embeds: [embed] });
-      console.log(`✅ Successfully sent: ${mod.title}`);
+      console.log(`✅ Successfully sent: ${mod.title} to channel ${channelId}`);
     } catch (err) {
       console.error(`❌ Failed to send "${mod.title}" to Discord channel ${channelId}:`, err.message);
     }

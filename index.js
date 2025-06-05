@@ -387,7 +387,7 @@ async function checkForNewMods() {
   try {
     const apiMods = await fetchModsFromAPI();
     const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
-    const newApiMods = apiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${m.version}`)).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const newApiMods = apiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`)).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (newApiMods.length) {
       console.log(`✅ Found ${newApiMods.length} new API mods.`);

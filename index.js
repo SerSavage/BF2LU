@@ -685,8 +685,8 @@ client.once('ready', async () => {
     console.log('🔎 Skipping initial mod check: Cache is recent (last checked:', globalCache.lastChecked, ')');
   }
 
-  setInterval(checkSWUpdates, 30 * 60 * 1000);
-  setInterval(checkForNewMods, 10 * 60 * 1000);
+  setInterval(checkSWUpdates, 5 * 60 * 1000);
+  setInterval(checkForNewMods, 5 * 60 * 1000);
 });
 
 client.on('messageCreate', async (message) => {

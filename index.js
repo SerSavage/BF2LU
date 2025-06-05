@@ -155,10 +155,9 @@ const roleMapping = {
 };
 
 const supportedLanguages = [
-  'ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr',
-  'ga', 'gl', 'he', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nb',
-  'nl', 'pb', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq', 'sv', 'th', 'tl', 'tr',
-  'uk', 'zh', 'zt'
+  'ar', 'de', 'en', 'es', 'fr',
+  'ja', 'ko', 'lt', 'pb', 'pl', 'pt',
+  'ru', 'sv', 'tr', 'zt',
 ];
 
 const targetChannels = [
@@ -171,36 +170,27 @@ const targetChannels = [
 ];
 
 const triggers = [
-  'bad joke', 'cringe', 'bro why', 'this is cursed', 'forbidden word',
-  'not funny', 'who asked', 'kill me now', 'this ain\'t it', 'try harder',
-  'that didn\'t land', 'dark humor', 'edgy much', 'cancelled', 'too soon',
-  'yeesh', 'ouch', 'bruh moment', 'your humor is broken', 'dude wtf',
-  'wtf did i just read', 'how is this a joke', 'zero chill', 'this belongs in the trash',
-  'yikes', 'gross', 'tone deaf', 'read the room', 'problematic',
-  'racist joke', 'sexist joke', 'offensive joke', 'abusive joke', 'inappropriate joke',
-  'harmful joke', 'ableist joke', 'homophobic joke', 'misogynistic joke', 'distasteful joke'
+  'kill me now', 'ableist joke', 'homophobic joke', 'misogynistic joke', 'distasteful joke'
 ];
 
 const extremeTriggers = [
   'nigger', 'chink', 'gook', 'spic', 'kike', 'sand nigger', 'porch monkey',
   'slant eye', 'wetback', 'beaner', 'camel jockey', 'raghead', 'towelhead',
   'monkey', 'jungle bunny', 'zipperhead', 'yellow peril', 'coon', 'pickaninny',
-  'gas the jews', 'heil hitler', 'sieg heil', 'oven dodger', 'hook nose', 'dirty jew', 'ashkenazi scum',
-  'faggot', 'dyke', 'tranny', 'no homo', 'fudge packer', 'shemale',
-  'drag freak', 'queer', 'retard', 'spastic', 'mongoloid', 'window licker', 'cripple', 'vegetable',
-  'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'make me a sandwich',
-  'women can\'t drive', 'she asked for it', 'rape her', 'kill her',
-  'rape', 'rape you', 'raping', 'kill yourself', 'kms', 'kys',
-  'go hang yourself', 'slit your wrists', 'choke and die',
+  'gas the jews', 'heil hitler', 'sieg heil', 'oven dodger', 'hook nose', 'dirty jew',
+  'faggot', 'dyke', 'tranny', 'fudge packer', 'shemale', 'cripple',
+  'drag freak', 'queer', 'retard', 'spastic', 'mongoloid', 'window licker',
+  'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'she asked for it', 
+  'rape her', 'kill her','rape', 'rape you', 'raping', 'kill yourself', 'kms',
+  'go hang yourself', 'slit your wrists', 'choke and die', 'kys',
   'beat her', 'abuse her', 'molest', 'pedophile', 'pedo', 'groomer',
-  'build the wall', 'go back to your country', 'illegal alien', 'white power',
-  'white pride', 'blood and soil', 'ethnic cleansing', 'great replacement',
+  'go back to your country', 'illegal alien', 'white power',
+  'white pride', 'ethnic cleansing', 'great replacement',
   'kkk', 'white lives matter', '14 words', '1488', 'six million wasn\'t enough',
-  'going ER', 'beta uprising', 'soy boy', 'femoid',
+  'soy boy', 'femoid', 'you should die', 'ashkenazi scum',
   'roastie', 'chad', 'stacy', 'rape fuel', 'gymcel', 'kill all women',
-  'mass shooter vibes', 'school shooter',
-  'fuck you', 'die', 'i hope you die', 'you should die', 'kill all',
-  'useless piece of shit', 'waste of air', 'why are you alive', 'die in a fire'
+  'mass shooter vibes', 'fuck you', 'die', 'i hope you die', 
+  'useless piece of shit', 'waste of air', 'why are you alive',
 ];
 
 async function registerCommands() {

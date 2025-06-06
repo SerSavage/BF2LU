@@ -535,13 +535,7 @@ const desiredRoleOrder = [
   '1362488521671311601', // Sentinel
   '1362488467757465981', // Marauder
   '1362488420299047024', // Consular
-  '1362488297510797443', // Guardian
-  '1364271161000591430', // LFG-KYBER
-  '1364262718487531581', // LFG-VANILLA
-  '1371897792695369778', // LFG-CLASSIC2005
-  '1371895939786080297', // LFG-CLASSIC2004
-  '1365936777176682547', // LFG-SWTOR
-  '1373174776985681970', // Kyber Luminary
+  '1362488297510797443',  // Guardian
   '1380201310711840949', // KYBER Team Manager
   '1363638233208062155', // KYBER Team
   '1373174776985681970'  // Kyber Luminary
@@ -614,15 +608,15 @@ async function checkAndReorderRoles(force = false) {
 
     // Prepare new positions as array for setPositions
     const newPositions = [];
-    // Start above highest existing non-managed role (e.g., LFG-KYBER at 6, LFG-VANILLA at 5)
-    let basePosition = 20;
-    for (let i = desiredRoleOrder.length - 1; i >= 0; i--) {
+    // Start above highest existing role (e.g., BF Legacy Unbound Team at 30)
+    let basePosition = 31;
+    for (let i = 0; i < desiredRoleOrder.length; i++) {
       const roleId = desiredRoleOrder[i];
       const role = roles.get(roleId);
       if (role) {
         // Ensure bot's role is higher than the highest role we’re managing
-        if (role.position >= botMember.roles.highest.position) {
-          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (position: ${role.position}, name: ${role.name})`);
+        if (basePosition >= botMember.roles.highest.position) {
+          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (target position: ${basePosition}, name: ${role.name})`);
           continue;
         }
         newPositions.push({ role: roleId, position: basePosition++ });

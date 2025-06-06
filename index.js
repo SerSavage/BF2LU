@@ -526,11 +526,10 @@ async function checkSWUpdates() {
   }
 }
 
-// Desired role order (higher index = higher priority in Discord hierarchy)
 const desiredRoleOrder = [
   '1362490083017625640', // Sorcerer
   '1362490015648579845', // Inquisitor
-  '1362489042821972219', // Grey Warden/GreyWarden
+  '1362489042821972219', // Grey Warden
   '1362488725111705650', // Balanced
   '1362488684469026976', // Mandalorian
   '1362488521671311601', // Sentinel
@@ -604,7 +603,8 @@ async function checkAndReorderRoles(force = false) {
 
     // Prepare new positions as array for setPositions
     const newPositions = [];
-    let basePosition = 1; // Start above @everyone (position 0)
+    // Start above highest existing non-managed role (e.g., LFG-KYBER at 6, LFG-VANILLA at 5)
+    let basePosition = 20;
     for (let i = desiredRoleOrder.length - 1; i >= 0; i--) {
       const roleId = desiredRoleOrder[i];
       const role = roles.get(roleId);

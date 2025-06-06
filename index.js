@@ -177,8 +177,8 @@ const extremeTriggers = [
   'gas the jews', 'heil hitler', 'sieg heil', 'oven dodger', 'hook nose', 'dirty jew',
   'faggot', 'dyke', 'tranny', 'fudge packer', 'shemale', 'cripple',
   'drag freak', 'queer', 'retard', 'spastic', 'mongoloid', 'window licker',
-  'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'she asked for it', 
-  'rape her', 'kill her','rape', 'rape you', 'raping', 'kill yourself', 'kms',
+  'bitch', 'cunt', 'slut', 'whore', 'hoe', 'dumb broad', 'she asked for it',
+  'rape her', 'kill her', 'rape', 'rape you', 'raping', 'kill yourself', 'kms',
   'go hang yourself', 'slit your wrists', 'choke and die', 'kys',
   'beat her', 'abuse her', 'molest', 'pedophile', 'pedo', 'groomer',
   'go back to your country', 'illegal alien', 'white power',
@@ -186,7 +186,7 @@ const extremeTriggers = [
   'kkk', 'white lives matter', '14 words', '1488', 'six million wasn\'t enough',
   'soy boy', 'femoid', 'you should die', 'ashkenazi scum',
   'roastie', 'chad', 'stacy', 'rape fuel', 'gymcel', 'kill all women',
-  'mass shooter vibes', 'fuck you', 'die', 'i hope you die', 
+  'mass shooter vibes', 'fuck you', 'die', 'i hope you die',
   'useless piece of shit', 'waste of air', 'why are you alive',
 ];
 
@@ -599,7 +599,7 @@ client.once('ready', async () => {
     const personalChannel = await client.channels.fetch(PERSONAL_NEXUS_CHANNEL_ID);
     if (personalChannel && personalChannel.isTextBased()) {
       const embed = new EmbedBuilder()
-        .setTitle(`✅ Initial Post: ${initialMod.title}`)
+        .setTitle(`🛠️ Initial Post: ${initialMod.title}`)
         .setDescription(`🎮 Version: ${initialMod.version}\n📅 Date: ${initialDate.toISOString()}\n📚 Category: ${initialMod.category}\n🔗 [Download](${initialMod.url})`)
         .setColor('#00FF00')
         .setFooter({ text: 'Star Wars: Battlefront II Mods' })
@@ -608,7 +608,7 @@ client.once('ready', async () => {
       console.log(`✅ Sent initial post for ${initialMod.title} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
     }
   } else {
-    console.warn(`ℹ️ Initial post for BF Poofies (mod_id: ${initialModId}) already exists, skipping...`);
+    console.log(`ℹ️ Initial post for BF Poofies (mod_id: ${initialModId}) already exists, skipping`);
   }
 
   const lastChecked = new Date(globalCache.lastChecked);
@@ -620,47 +620,46 @@ client.once('ready', async () => {
       const apiSeen = new Set(globalCache.mods.map(m => `${m.mod_id}:${m.version}`));
       const newInitialApiMods = initialApiMods.filter(mod => !apiSeen.has(`${mod.mod_id}:${mod.version}`));
       if (newInitialApiMods.length) {
-        console.log(`✅ Found ${newInitialApiMods.length} new mods to post initially`);
+        console.log(`✅ Found ${newInitialApiMods.length} new initial API mods`);
         newInitialApiMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
         await sendDiscordNotification(newInitialApiMods, MOD_UPDATER_CHANNEL_ID);
         newInitialApiMods.forEach(newMod => {
           let inserted = false;
-          for (let i = 0; i < globalCache.length; i++) {
+          for (let i = 0; i < globalCache.mods.length; i++) {
             if (new Date(newMod.date) < new Date(globalCache.mods[i].date)) {
-              globalCache.splice(i, 0, newMod);
+              globalCache.mods.splice(i, 0, newMod);
               inserted = true;
               break;
             }
-        }
-        if (!inserted) globalCacheMods.push(newMod);
+          }
+          if (!inserted) globalCache.mods.push(newMod);
         });
-        globalCache.mods = globalCacheMods.slice(0, 10000);
+        globalCache.mods = globalCache.mods.slice(0, 100000);
         globalCache.lastChecked = new Date().toISOString();
         await saveModCache();
       } else {
-        console.log('ℹ️ No new mods found in initial check');
+        console.log('ℹ️ No new initial API mods found');
       }
 
-      const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(b.date) - new Date(a.date))));
+      const initialPersonalMods = await fetchPersonalModsFromAPI().then(mods => mods.sort((a, b) => new Date(a.date) - new Date(b.date)));
       const newInitialPersonalMods = [];
       for (const mod of initialPersonalMods) {
-        const cachedMod = personalCache.mods[mod.id] || {};
+        const cachedMod = personalCache.mods[mod.mod_id] || {};
         const isNewVersion = !cachedMod.version || cachedMod.version !== mod.version;
         const isNewDate = !cachedMod.date || new Date(mod.date) > new Date(cachedMod.date);
         if (isNewVersion || isNewDate) {
-          newInitialPersonalmods.push(mod);
-          personalCache[mod.id] = mod;
+          newInitialPersonalMods.push(mod);
+          personalCache.mods[mod.mod_id] = mod;
         }
       }
       if (newInitialPersonalMods.length) {
         console.log(`✅ Found ${newInitialPersonalMods.length} new initial personal mods`);
         newInitialPersonalMods.forEach(mod => console.log(`- ${mod.title} (v${mod.version}, ${mod.date})`));
         await sendDiscordNotification(newInitialPersonalMods, PERSONAL_NEXUS_CHANNEL_ID);
-        console.log(`✅ Sent ${newInitialPersonalMods.length} to ${PERSONAL_NEXUS_CHANNEL_ID}`);
         personalCache.lastResetDate = new Date().toISOString();
         await savePersonalModCache();
       } else {
-        console.log('ℹ️ No new personal mods found in initial check');
+        console.log('ℹ️ No new initial personal mods found');
       }
     } catch (err) {
       console.error('❌ Error during initial mod fetch:', err.message);

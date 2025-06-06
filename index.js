@@ -538,7 +538,11 @@ const desiredRoleOrder = [
   '1362488297510797443',  // Guardian
   '1380201310711840949', // KYBER Team Manager
   '1363638233208062155', // KYBER Team
-  '1373174776985681970'  // Kyber Luminary
+  '1364262718487531581',
+  '1371897792695369778',
+  '1371895939786080297',
+  '1365936777176682547',
+  '1364271161000591430'  // 
 ];
 
 // Cache for role positions (to avoid unnecessary updates)

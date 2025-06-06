@@ -536,6 +536,12 @@ const desiredRoleOrder = [
   '1362488467757465981', // Marauder
   '1362488420299047024', // Consular
   '1362488297510797443', // Guardian
+  '1364271161000591430', // LFG-KYBER
+  '1364262718487531581', // LFG-VANILLA
+  '1371897792695369778', // LFG-CLASSIC2005
+  '1371895939786080297', // LFG-CLASSIC2004
+  '1365936777176682547', // LFG-SWTOR
+  '1373174776985681970', // Kyber Luminary
   '1380201310711840949', // KYBER Team Manager
   '1363638233208062155', // KYBER Team
   '1373174776985681970'  // Kyber Luminary
@@ -556,7 +562,12 @@ async function checkAndReorderRoles(force = false) {
 
     // Check if bot has MANAGE_ROLES permission
     const botMember = guild.members.cache.get(client.user.id);
-    if (!botMember || !botMember.permissions.has('MANAGE_ROLES')) {
+    if (!botMember) {
+      console.error('❌ Bot member not found in guild');
+      return;
+    }
+    console.log(`ℹ️ Bot: ${client.user.tag}, Role: ${botMember.roles.highest.name}, Position: ${botMember.roles.highest.position}`);
+    if (!botMember.permissions.has('MANAGE_ROLES')) {
       console.error('❌ Bot lacks MANAGE_ROLES permission for role reordering');
       return;
     }
@@ -619,6 +630,13 @@ async function checkAndReorderRoles(force = false) {
         console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
       }
     }
+
+    // Log intended positions
+    console.log('ℹ️ Intended role positions:');
+    newPositions.forEach(pos => {
+      const role = roles.get(pos.role);
+      console.log(`- ID: ${pos.role}, Name: ${role ? role.name : 'Unknown'}, New Position: ${pos.position}`);
+    });
 
     // Apply new positions
     try {

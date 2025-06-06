@@ -551,14 +551,12 @@ let rolePositionCache = null;
 async function checkAndReorderRoles(force = false) {
   console.log('🔍 Checking role order...', force ? '(Forced)' : '');
   try {
-    // Fetch the guild (assuming the bot is in one guild; adjust if multi-guild)
     const guild = client.guilds.cache.first();
     if (!guild) {
       console.error('❌ No guild found for role reordering');
       return;
     }
 
-    // Check if bot has MANAGE_ROLES permission
     const botMember = guild.members.cache.get(client.user.id);
     if (!botMember) {
       console.error('❌ Bot member not found in guild');
@@ -570,17 +568,14 @@ async function checkAndReorderRoles(force = false) {
       return;
     }
 
-    // Fetch all roles with force to ensure cache is fresh
     await guild.roles.fetch(null, { force: true });
     const roles = guild.roles.cache;
 
-    // Log all roles for debugging
     console.log('ℹ️ Available roles in guild:');
     roles.forEach(role => {
       console.log(`- ID: ${role.id}, Name: ${role.name}, Position: ${role.position}`);
     });
 
-    // Get current role positions
     const currentOrder = {};
     roles.forEach(role => {
       if (desiredRoleOrder.includes(role.id)) {
@@ -588,16 +583,12 @@ async function checkAndReorderRoles(force = false) {
       }
     });
 
-    // Check if order matches desired, or force reorder
     const isOutOfOrder = force || desiredRoleOrder.some((roleId, index) => {
       const currentPos = currentOrder[roleId];
       if (typeof currentPos === 'undefined') {
         console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
         return false;
       }
-      // Higher index should have higher position value in Discord
-      const expectedRelativePos = desiredRoleOrder.length - 1 - index;
-      // If cache is empty or positions don’t align with desired order, flag as out of order
       if (!rolePositionCache || currentPos !== rolePositionCache[roleId]) {
         console.log(`🔎 Role ${roleId} position: ${currentPos}, expected relative order check, cache: ${rolePositionCache ? rolePositionCache[roleId] : 'none'}`);
         return true;
@@ -610,38 +601,33 @@ async function checkAndReorderRoles(force = false) {
       return;
     }
 
-    // Prepare new positions as array for setPositions
     const newPositions = [];
-    // Start above highest existing role (e.g., BF Legacy Unbound Team at 30)
-    let basePosition = 31;
+    // Start just below bot's highest role position
+    let basePosition = botMember.roles.highest.position - 1;
     for (let i = 0; i < desiredRoleOrder.length; i++) {
       const roleId = desiredRoleOrder[i];
       const role = roles.get(roleId);
       if (role) {
-        // Ensure bot's role is higher than the highest role we’re managing
-        if (basePosition >= botMember.roles.highest.position) {
-          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (target position: ${basePosition}, name: ${role.name})`);
-          continue;
+        if (basePosition < 1) {
+          console.error('❌ Position too low to assign roles; bot role position too low');
+          return;
         }
-        newPositions.push({ role: roleId, position: basePosition++ });
+        newPositions.push({ role: roleId, position: basePosition-- }); // Decrement to align with desired order
       } else {
         console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
       }
     }
 
-    // Log intended positions
     console.log('ℹ️ Intended role positions:');
     newPositions.forEach(pos => {
       const role = roles.get(pos.role);
       console.log(`- ID: ${pos.role}, Name: ${role ? role.name : 'Unknown'}, New Position: ${pos.position}`);
     });
 
-    // Apply new positions
     try {
       if (newPositions.length > 0) {
         await guild.roles.setPositions(newPositions);
         console.log('✅ Role positions updated successfully');
-        // Update cache
         rolePositionCache = {};
         roles.forEach(role => {
           if (desiredRoleOrder.includes(role.id)) {

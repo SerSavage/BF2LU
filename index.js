@@ -545,8 +545,8 @@ const desiredRoleOrder = [
 // Cache for role positions (to avoid unnecessary updates)
 let rolePositionCache = null;
 
-async function checkAndReorderRoles() {
-  console.log('🔍 Checking role order...');
+async function checkAndReorderRoles(force = false) {
+  console.log('🔍 Checking role order...', force ? '(Forced)' : '');
   try {
     // Fetch the guild (assuming the bot is in one guild; adjust if multi-guild)
     const guild = client.guilds.cache.first();
@@ -574,8 +574,8 @@ async function checkAndReorderRoles() {
       }
     });
 
-    // Check if order matches desired (and cache)
-    const isOutOfOrder = desiredRoleOrder.some((roleId, index) => {
+    // Check if order matches desired, or force reorder
+    const isOutOfOrder = force || desiredRoleOrder.some((roleId, index) => {
       const currentPos = currentOrder[roleId];
       if (typeof currentPos === 'undefined') {
         console.log(`⚠️ Role ${roleId} not found in guild`);
@@ -583,15 +583,15 @@ async function checkAndReorderRoles() {
       }
       // Higher index should have higher position value in Discord
       const expectedRelativePos = desiredRoleOrder.length - 1 - index;
-      const isCorrect = currentPos === rolePositionCache?.[roleId] && rolePositionCache[roleId] !== undefined;
-      if (!isCorrect) {
-        console.log(`🔎 Role ${roleId} position: ${currentPos}, expected relative order check`);
+      // If cache is empty or positions don’t align with desired order, flag as out of order
+      if (!rolePositionCache || currentPos !== rolePositionCache[roleId]) {
+        console.log(`🔎 Role ${roleId} position: ${currentPos}, expected relative order check, cache: ${rolePositionCache ? rolePositionCache[roleId] : 'none'}`);
         return true;
       }
       return false;
     });
 
-    if (!isOutOfOrder && rolePositionCache) {
+    if (!isOutOfOrder && rolePositionCache && !force) {
       console.log('ℹ️ Role order is correct, no changes needed');
       return;
     }
@@ -777,7 +777,8 @@ client.once('ready', async () => {
 
   setInterval(checkSWUpdates, 5 * 60 * 1000);
   setInterval(checkForNewMods, 5 * 60 * 1000);
-  setInterval(checkAndReorderRoles, 5 * 60 * 1000);
+  await checkAndReorderRoles(true); // Force initial check and correction
+  setInterval(checkAndReorderRoles, 5 * 60 * 1000); // Periodic checks
 });
 
 client.on('messageCreate', async (message) => {

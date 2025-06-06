@@ -526,6 +526,113 @@ async function checkSWUpdates() {
   }
 }
 
+// Desired role order (higher index = higher priority in Discord hierarchy)
+const desiredRoleOrder = [
+  '1362490083017625640', // Sorcerer
+  '1362490015648579845', // Inquisitor
+  '1362489042821972219', // Grey Warden/GreyWarden
+  '1362488725111705650', // Balanced
+  '1362488684469026976', // Mandalorian
+  '1362488521671311601', // Sentinel
+  '1362488467757465981', // Marauder
+  '1362488420299047024', // Consular
+  '13624882975107974438', // Guardian
+  '1380201310711840949', // KYBER Team Manager
+  '1363638233208062155', // KYBER Team
+  '1373174776985681970'  // Kyber Luminary
+];
+
+// Cache for role positions (to avoid unnecessary updates)
+let rolePositionCache = null;
+
+async function checkAndReorderRoles() {
+  console.log('🔍 Checking role order...');
+  try {
+    // Fetch the guild (assuming the bot is in one guild; adjust if multi-guild)
+    const guild = client.guilds.cache.first();
+    if (!guild) {
+      console.error('❌ No guild found for role reordering');
+      return;
+    }
+
+    // Check if bot has MANAGE_ROLES permission
+    const botMember = guild.members.cache.get(client.user.id);
+    if (!botMember || !botMember.permissions.has('MANAGE_ROLES')) {
+      console.error('❌ Bot lacks MANAGE_ROLES permission for role reordering');
+      return;
+    }
+
+    // Fetch all roles
+    await guild.roles.fetch();
+    const roles = guild.roles.cache;
+
+    // Get current role positions
+    const currentOrder = {};
+    roles.forEach(role => {
+      if (desiredRoleOrder.includes(role.id)) {
+        currentOrder[role.id] = role.position;
+      }
+    });
+
+    // Check if order matches desired (and cache)
+    const isOutOfOrder = desiredRoleOrder.some((roleId, index) => {
+      const currentPos = currentOrder[roleId];
+      if (typeof currentPos === 'undefined') {
+        console.log(`⚠️ Role ${roleId} not found in guild`);
+        return false;
+      }
+      // Higher index should have higher position value in Discord
+      const expectedRelativePos = desiredRoleOrder.length - 1 - index;
+      const isCorrect = currentPos === rolePositionCache?.[roleId] && rolePositionCache[roleId] !== undefined;
+      if (!isCorrect) {
+        console.log(`🔎 Role ${roleId} position: ${currentPos}, expected relative order check`);
+        return true;
+      }
+      return false;
+    });
+
+    if (!isOutOfOrder && rolePositionCache) {
+      console.log('ℹ️ Role order is correct, no changes needed');
+      return;
+    }
+
+    // Prepare new positions
+    const newPositions = {};
+    let basePosition = 1; // Start above @everyone (position 0)
+    for (let i = desiredRoleOrder.length - 1; i >= 0; i--) {
+      const roleId = desiredRoleOrder[i];
+      const role = roles.get(roleId);
+      if (role) {
+        // Ensure bot's role is higher than the highest role we’re managing
+        if (role.position >= botMember.roles.highest.position) {
+          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (position: ${role.position})`);
+          continue;
+        }
+        newPositions[roleId] = basePosition++;
+      } else {
+        console.log(`⚠️ Role ${roleId} not found, skipping`);
+      }
+    }
+
+    // Apply new positions
+    try {
+      await guild.roles.setPositions(newPositions);
+      console.log('✅ Role positions updated successfully');
+      // Update cache
+      rolePositionCache = {};
+      roles.forEach(role => {
+        if (desiredRoleOrder.includes(role.id)) {
+          rolePositionCache[role.id] = role.position;
+        }
+      });
+    } catch (err) {
+      console.error('❌ Error updating role positions:', err.message);
+    }
+  } catch (err) {
+    console.error('❌ Error in checkAndReorderRoles:', err.message);
+  }
+}
+
 client.once('ready', async () => {
   console.log(`🚀 Logged in as ${client.user.tag}`);
   await loadUsers();
@@ -670,6 +777,7 @@ client.once('ready', async () => {
 
   setInterval(checkSWUpdates, 5 * 60 * 1000);
   setInterval(checkForNewMods, 5 * 60 * 1000);
+  setInterval(checkAndReorderRoles, 5 * 60 * 1000);
 });
 
 client.on('messageCreate', async (message) => {

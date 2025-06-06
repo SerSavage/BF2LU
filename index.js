@@ -562,9 +562,15 @@ async function checkAndReorderRoles(force = false) {
       return;
     }
 
-    // Fetch all roles
-    await guild.roles.fetch();
+    // Fetch all roles with force to ensure cache is fresh
+    await guild.roles.fetch(null, { force: true });
     const roles = guild.roles.cache;
+
+    // Log all roles for debugging
+    console.log('ℹ️ Available roles in guild:');
+    roles.forEach(role => {
+      console.log(`- ID: ${role.id}, Name: ${role.name}, Position: ${role.position}`);
+    });
 
     // Get current role positions
     const currentOrder = {};
@@ -578,7 +584,7 @@ async function checkAndReorderRoles(force = false) {
     const isOutOfOrder = force || desiredRoleOrder.some((roleId, index) => {
       const currentPos = currentOrder[roleId];
       if (typeof currentPos === 'undefined') {
-        console.log(`⚠️ Role ${roleId} not found in guild`);
+        console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
         return false;
       }
       // Higher index should have higher position value in Discord
@@ -596,8 +602,8 @@ async function checkAndReorderRoles(force = false) {
       return;
     }
 
-    // Prepare new positions
-    const newPositions = {};
+    // Prepare new positions as array for setPositions
+    const newPositions = [];
     let basePosition = 1; // Start above @everyone (position 0)
     for (let i = desiredRoleOrder.length - 1; i >= 0; i--) {
       const roleId = desiredRoleOrder[i];
@@ -605,26 +611,30 @@ async function checkAndReorderRoles(force = false) {
       if (role) {
         // Ensure bot's role is higher than the highest role we’re managing
         if (role.position >= botMember.roles.highest.position) {
-          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (position: ${role.position})`);
+          console.error(`❌ Bot's role is not high enough to manage role ${roleId} (position: ${role.position}, name: ${role.name})`);
           continue;
         }
-        newPositions[roleId] = basePosition++;
+        newPositions.push({ role: roleId, position: basePosition++ });
       } else {
-        console.log(`⚠️ Role ${roleId} not found, skipping`);
+        console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
       }
     }
 
     // Apply new positions
     try {
-      await guild.roles.setPositions(newPositions);
-      console.log('✅ Role positions updated successfully');
-      // Update cache
-      rolePositionCache = {};
-      roles.forEach(role => {
-        if (desiredRoleOrder.includes(role.id)) {
-          rolePositionCache[role.id] = role.position;
-        }
-      });
+      if (newPositions.length > 0) {
+        await guild.roles.setPositions(newPositions);
+        console.log('✅ Role positions updated successfully');
+        // Update cache
+        rolePositionCache = {};
+        roles.forEach(role => {
+          if (desiredRoleOrder.includes(role.id)) {
+            rolePositionCache[role.id] = role.position;
+          }
+        });
+      } else {
+        console.log('⚠️ No valid roles to reorder');
+      }
     } catch (err) {
       console.error('❌ Error updating role positions:', err.message);
     }

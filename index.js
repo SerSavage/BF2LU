@@ -536,7 +536,7 @@ const desiredRoleOrder = [
   '1362488521671311601', // Sentinel
   '1362488467757465981', // Marauder
   '1362488420299047024', // Consular
-  '13624882975107974438', // Guardian
+  '1362488297510797443', // Guardian
   '1380201310711840949', // KYBER Team Manager
   '1363638233208062155', // KYBER Team
   '1373174776985681970'  // Kyber Luminary

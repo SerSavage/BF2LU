@@ -526,26 +526,6 @@ async function checkSWUpdates() {
   }
 }
 
-const desiredRoleOrder = [
-  '1362490083017625640', // Sorcerer
-  '1362490015648579845', // Inquisitor
-  '1362489042821972219', // Grey Warden
-  '1362488725111705650', // Balanced
-  '1362488684469026976', // Mandalorian
-  '1362488521671311601', // Sentinel
-  '1362488467757465981', // Marauder
-  '1362488420299047024', // Consular
-  '1362488297510797443', // Guardian
-  '1362476681356509427', // Droids
-  '1380201310711840949', // KYBER Team Manager
-  '1363638233208062155', // KYBER Team
-  '1364262718487531581',
-  '1371897792695369778',
-  '1371895939786080297',
-  '1365936777176682547',
-  '1364271161000591430'  // 
-];
-
 // Cache for role positions (to avoid unnecessary updates)
 let rolePositionCache = null;
 

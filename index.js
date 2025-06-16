@@ -111,6 +111,7 @@ const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translatio
 const CLIENT_ID = process.env.CLIENT_ID;
 const WELCOME_CHANNEL_ID = '1361849763611541584';
 const MOD_CHANNEL_ID = '1362988156546449598';
+const KYBER_ANNOUNCEMENTS_CHANNEL_ID = '1363367257010606231';
 const MESSAGE_ID_KEY = 'REACTION_ROLE_MESSAGE_ID';
 const commandsRegisteredFile = path.join(dataDir, 'commands_registered.txt');
 const SW_CACHE_FILE = path.join(dataDir, 'sw_articles.json');
@@ -136,6 +137,10 @@ if (!NEXUS_AUTHOR_ID) {
 }
 if (!SW_CHANNEL_ID) {
   console.error('❌ DISCORD_SW_CHANNEL_ID is not set!');
+  process.exit(1);
+}
+if (!process.env.KYBER_API_KEY) {
+  console.error('❌ KYBER_API_KEY is not set!');
   process.exit(1);
 }
 
@@ -526,6 +531,67 @@ async function checkSWUpdates() {
   }
 }
 
+// KYBER server status checking
+let kyberStatusCache = null;
+async function checkKyberStatus() {
+  console.log('🔍 Checking KYBER server status...');
+  try {
+    const response = await axios.get('https://api.kyber.gg/v1/status', {
+      headers: {
+        Authorization: `Bearer ${process.env.KYBER_API_KEY}`,
+        Accept: 'application/json',
+      },
+    });
+    const isOnline = response.data.status === 'online';
+    console.log(`📡 KYBER server status: ${isOnline ? 'Online' : 'Offline'}`);
+
+    const kyberChannel = await client.channels.fetch(KYBER_ANNOUNCEMENTS_CHANNEL_ID).catch(err => {
+      console.error(`❌ Failed to fetch KYBER_ANNOUNCEMENTS_CHANNEL_ID (${KYBER_ANNOUNCEMENTS_CHANNEL_ID}):`, err.message);
+      return null;
+    });
+    if (!kyberChannel || !kyberChannel.isTextBased()) {
+      console.error(`❌ Invalid KYBER announcements channel or not text-based`);
+      return;
+    }
+    const hasSendPermission = kyberChannel.permissionsFor(client.user)?.has('SEND_MESSAGES');
+    if (!hasSendPermission) {
+      console.error(`❌ Bot lacks SEND_MESSAGES permission in channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}`);
+      return;
+    }
+
+    if (kyberStatusCache === null) {
+      // Initial check, set cache but don't send a message
+      kyberStatusCache = isOnline;
+      console.log(`ℹ️ Initial KYBER status set: ${isOnline ? 'Online' : 'Offline'}`);
+      return;
+    }
+
+    if (kyberStatusCache !== isOnline) {
+      const embed = new EmbedBuilder()
+        .setTitle(`KYBER Server Status Update`)
+        .setDescription(`The KYBER server is now **${isOnline ? 'Online' : 'Offline'}**.`)
+        .setColor(isOnline ? '#00FF00' : '#FF0000')
+        .setFooter({ text: 'KYBER Server Status' })
+        .setTimestamp();
+      try {
+        await kyberChannel.send({ embeds: [embed] });
+        console.log(`✅ Sent KYBER status update to channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}: ${isOnline ? 'Online' : 'Offline'}`);
+      } catch (err) {
+        console.error(`❌ Failed to send KYBER status update to channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}:`, err.message);
+      }
+      kyberStatusCache = isOnline;
+    } else {
+      console.log('ℹ️ No change in KYBER server status');
+    }
+  } catch (err) {
+    console.error('❌ Error checking KYBER server status:', {
+      message: err.message,
+      status: err.response?.status,
+      data: err.response?.data,
+    });
+  }
+}
+
 const desiredRoleOrder = [
   '1362490083017625640', // Sorcerer
   '1362490015648579845', // Inquisitor
@@ -790,6 +856,8 @@ client.once('ready', async () => {
 
   setInterval(checkSWUpdates, 5 * 60 * 1000);
   setInterval(checkForNewMods, 5 * 60 * 1000);
+  setInterval(checkKyberStatus, 5 * 60 * 1000); // Check KYBER status every 5 minutes
+  await checkKyberStatus(); // Initial KYBER status check
   await checkAndReorderRoles(true); // Force initial check and correction
   setInterval(checkAndReorderRoles, 5 * 60 * 1000); // Periodic checks
 });

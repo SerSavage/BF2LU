@@ -111,7 +111,6 @@ const LIBRETRANSLATE_URL = process.env.LIBRETRANSLATE_URL || 'https://translatio
 const CLIENT_ID = process.env.CLIENT_ID;
 const WELCOME_CHANNEL_ID = '1361849763611541584';
 const MOD_CHANNEL_ID = '1362988156546449598';
-const KYBER_ANNOUNCEMENTS_CHANNEL_ID = '1363367257010606231';
 const MESSAGE_ID_KEY = 'REACTION_ROLE_MESSAGE_ID';
 const commandsRegisteredFile = path.join(dataDir, 'commands_registered.txt');
 const SW_CACHE_FILE = path.join(dataDir, 'sw_articles.json');
@@ -137,10 +136,6 @@ if (!NEXUS_AUTHOR_ID) {
 }
 if (!SW_CHANNEL_ID) {
   console.error('❌ DISCORD_SW_CHANNEL_ID is not set!');
-  process.exit(1);
-}
-if (!process.env.KYBER_API_KEY) {
-  console.error('❌ KYBER_API_KEY is not set!');
   process.exit(1);
 }
 
@@ -531,155 +526,6 @@ async function checkSWUpdates() {
   }
 }
 
-// KYBER server status checking
-let kyberStatusCache = null;
-async function sendKyberStatusUpdate(isOnline) {
-  const kyberChannel = await client.channels.fetch(KYBER_ANNOUNCEMENTS_CHANNEL_ID).catch(err => {
-    console.error(`❌ Failed to fetch KYBER_ANNOUNCEMENTS_CHANNEL_ID (${KYBER_ANNOUNCEMENTS_CHANNEL_ID}):`, err.message);
-    return null;
-  });
-  if (!kyberChannel || !kyberChannel.isTextBased()) {
-    console.error(`❌ Invalid KYBER announcements channel or not text-based`);
-    return;
-  }
-  const hasSendPermission = kyberChannel.permissionsFor(client.user)?.has('SEND_MESSAGES');
-  if (!hasSendPermission) {
-    console.error(`❌ Bot lacks SEND_MESSAGES permission in channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}`);
-    return;
-  }
-
-  if (kyberStatusCache === null) {
-    kyberStatusCache = isOnline;
-    console.log(`ℹ️ Initial KYBER status set: ${isOnline ? 'Online' : 'Offline'}`);
-    return;
-  }
-
-  if (kyberStatusCache !== isOnline) {
-    const embed = new EmbedBuilder()
-      .setTitle(`KYBER Server Status Update`)
-      .setDescription(`The KYBER server is now **${isOnline ? 'Online' : 'Offline'}**.`)
-      .setColor(isOnline ? '#00FF00' : '#FF0000')
-      .setFooter({ text: 'KYBER Server Status' })
-      .setTimestamp();
-    try {
-      await kyberChannel.send({ embeds: [embed] });
-      console.log(`✅ Sent KYBER status update to channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}: ${isOnline ? 'Online' : 'Offline'}`);
-    } catch (err) {
-      console.error(`❌ Failed to send KYBER status update to channel ${KYBER_ANNOUNCEMENTS_CHANNEL_ID}:`, err.message);
-    }
-    kyberStatusCache = isOnline;
-  } else {
-    console.log('ℹ️ No change in KYBER server status');
-  }
-}
-
-async function checkKyberStatus() {
-  console.log('🔍 Checking KYBER server status...');
-  const KYBER_API_URL = process.env.KYBER_API_URL || 'https://kyber.gg/api/v2/status';
-  const STATUSPAGE_URL = 'https://api.statuspage.io/v1/pages/[PAGE_ID]/components'; // Replace [PAGE_ID] with actual ID
-  const MAX_RETRIES = 3;
-
-  // Try KYBER API with retries
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const dns = require('dns').promises;
-      const domain = new URL(KYBER_API_URL).hostname;
-      try {
-        const addresses = await dns.resolve(domain);
-        console.log(`DNS Resolution for ${domain}:`, addresses);
-      } catch (dnsErr) {
-        console.error(`DNS Resolution Error for ${domain}:`, dnsErr.message);
-      }
-
-      const response = await axios.get(KYBER_API_URL, {
-        headers: {
-          Authorization: `Bearer ${process.env.KYBER_API_KEY}`,
-          Accept: 'application/json',
-        },
-        timeout: 10000,
-      });
-      const isOnline = response.data.status === 'online';
-      console.log(`📡 KYBER server status (API): ${isOnline ? 'Online' : 'Offline'}`);
-      await sendKyberStatusUpdate(isOnline);
-      return;
-    } catch (err) {
-      console.error(`❌ Error checking KYBER API (Attempt ${attempt}/${MAX_RETRIES}):`, {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      if (attempt < MAX_RETRIES) {
-        console.log(`⏳ Retrying KYBER API after ${2000 * attempt}ms...`);
-        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-      }
-    }
-  }
-
-  // Fallback to Statuspage API
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await axios.get(STATUSPAGE_URL, {
-        headers: { Authorization: `OAuth ${process.env.STATUSPAGE_API_KEY || 'placeholder'}` },
-        timeout: 10000,
-      });
-      const apiComponent = response.data.find(comp => comp.name === 'API');
-      const isOnline = apiComponent && apiComponent.status === 'operational';
-      console.log(`📡 KYBER server status (Statuspage): ${isOnline ? 'Online' : 'Offline'}`);
-      await sendKyberStatusUpdate(isOnline);
-      return;
-    } catch (err) {
-      console.error(`❌ Error checking Statuspage API (Attempt ${attempt}/${MAX_RETRIES}):`, {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      if (attempt < MAX_RETRIES) {
-        console.log(`⏳ Retrying Statuspage API after ${2000 * attempt}ms...`);
-        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-      }
-    }
-  }
-
-  // Fallback to scraping (uncomment if needed)
-  /*
-  try {
-    const isOnline = await scrapeKyberStatus();
-    console.log(`📡 KYBER server status (scraped): ${isOnline ? 'Online' : 'Offline'}`);
-    await sendKyberStatusUpdate(isOnline);
-  } catch (scrapeErr) {
-    console.error('❌ Error scraping KYBER status:', scrapeErr.message);
-  }
-  */
-}
-
-/*
-// Fallback scraping function
-async function scrapeKyberStatus() {
-  console.log('🌐 Scraping KYBER server status from https://kyber.gg...');
-  const chromium = require('@sparticuz/chromium');
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: true,
-  });
-  const page = await browser.newPage();
-  await page.setJavaScriptEnabled(false);
-  await page.goto('https://kyber.gg', { waitUntil: 'domcontentloaded' });
-  const status = await page.evaluate(() => {
-    const statusElement = document.querySelector('body');
-    if (statusElement) {
-      const text = statusElement.textContent.toLowerCase();
-      return text.includes('online') && !text.includes('offline');
-    }
-    return false;
-  });
-  await browser.close();
-  console.log(`✅ Scraped KYBER status: ${status ? 'Online' : 'Offline'}`);
-  return status;
-}
-*/
-
 const desiredRoleOrder = [
   '1362490083017625640', // Sorcerer
   '1362490015648579845', // Inquisitor
@@ -693,14 +539,14 @@ const desiredRoleOrder = [
   '1362476681356509427', // Droids
   '1380201310711840949', // KYBER Team Manager
   '1363638233208062155', // KYBER Team
-  '1364262718487531581', // LFG-VANILLA
-  '1371897792695369778', // LFG-CLASSIC2005
-  '1371895939786080297', // LFG-CLASSIC2004
-  '1365936777176682547', // LFG-SWTOR
-  '1364271161000591430'  // LFG-KYBER
+  '1364262718487531581',
+  '1371897792695369778',
+  '1371895939786080297',
+  '1365936777176682547',
+  '1364271161000591430'  // 
 ];
 
-// Cache for role positions
+// Cache for role positions (to avoid unnecessary updates)
 let rolePositionCache = null;
 
 async function checkAndReorderRoles(force = false) {
@@ -757,6 +603,7 @@ async function checkAndReorderRoles(force = false) {
     }
 
     const newPositions = [];
+    // Start just below bot's highest role position
     let basePosition = botMember.roles.highest.position - 1;
     for (let i = 0; i < desiredRoleOrder.length; i++) {
       const roleId = desiredRoleOrder[i];
@@ -766,7 +613,7 @@ async function checkAndReorderRoles(force = false) {
           console.error('❌ Position too low to assign roles; bot role position too low');
           return;
         }
-        newPositions.push({ role: roleId, position: basePosition-- });
+        newPositions.push({ role: roleId, position: basePosition-- }); // Decrement to align with desired order
       } else {
         console.log(`⚠️ Role ${roleId} not found in guild - check ID or role existence`);
       }
@@ -935,17 +782,286 @@ client.once('ready', async () => {
         console.log('ℹ️ No new initial personal mods found');
       }
     } catch (err) {
-      console.error('❌ Error during initial mod check:', err.message);
+      console.error('❌ Error during initial mod fetch:', err.message);
     }
   } else {
     console.log(`ℹ️ Skipped initial mod check: Cache is recent (last checked: ${globalCache.lastChecked})`);
   }
 
-  setInterval(checkForNewMods, 12 * 60 * 60 * 1000); // Every 12 hours
-  setInterval(checkSWUpdates, 12 * 60 * 60 * 1000); // Every 12 hours
-  setInterval(checkKyberStatus, 5 * 60 * 1000); // Every 5 minutes
-  setInterval(() => checkAndReorderRoles(), 24 * 60 * 60 * 1000); // Every 24 hours
-  await checkAndReorderRoles(true); // Initial check
+  setInterval(checkSWUpdates, 5 * 60 * 1000);
+  setInterval(checkForNewMods, 5 * 60 * 1000);
+  await checkAndReorderRoles(true); // Force initial check and correction
+  setInterval(checkAndReorderRoles, 5 * 60 * 1000); // Periodic checks
+});
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+
+  const content = message.content.toLowerCase();
+
+  if (extremeTriggers.some(trigger => content.includes(trigger))) {
+    try {
+      const channel = message.channel;
+      const gifPath = './media/ashamed.gif';
+      await message.delete();
+      const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
+      if (modChannel && modChannel.isTextBased()) {
+        await modChannel.send({
+          content: `🚨 **EXTREME CONTENT DETECTED**\n🔗 **User:** <@${message.author.id}**\n🗑 **Message Deleted**\n📍 **Channel:** <#${channel.id}>`
+        });
+      }
+      if (require('fs').existsSync(gifPath)) {
+        const gifFile = new AttachmentBuilder(gifPath);
+        await channel.send({
+          content: `⚠️ Inappropriate content detected. A moderator has been notified.`,
+          files: [gifFile]
+        });
+      } else {
+        console.warn('⚠️ GIF file missing at:', gifPath);
+      }
+    } catch (err) {
+      console.error('❌ Failed to handle extreme content:', err.message);
+    }
+    return;
+  }
+
+  if (targetChannels.includes(message.channel.id) && triggers.some(trigger => content.includes(trigger))) {
+    try {
+      const filePath = './audio/cringe.mp3';
+      if (require('fs').existsSync(filePath)) {
+        const audioFile = new AttachmentBuilder(filePath);
+        await message.channel.send({
+          content: '🔊 Cringe detected!',
+          files: [audioFile]
+        });
+        const modChannel = await client.channels.fetch(MOD_CHANNEL_ID);
+        if (modChannel && modChannel.isTextBased()) {
+          await modChannel.send({
+            content: `⚠️ **Trigger detected in <#${message.channel.id}>**\n🔗 **User:** <@${message.author.id}**\n💬 **Message:** "${message.content}"`
+          });
+        }
+      } else {
+        console.warn('⚠️ Audio file missing at:', filePath);
+      }
+    } catch (err) {
+      console.error('❌ Failed to handle trigger:', err.message);
+    }
+  }
+
+  if (content.startsWith('!setlang ')) {
+    const parts = message.content.trim().split(' ');
+    const lang = parts[1]?.toLowerCase();
+    if (!supportedLanguages.includes(lang)) {
+      return message.reply('❗ Invalid language code. Supported: ' + supportedLanguages.join(', '));
+    }
+    users[message.author.id] = lang;
+    await fs.writeFile(usersFile, JSON.stringify(users, null, 2), 'utf8');
+    return message.reply(`✅ Language set to **${lang}**`);
+  }
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
+
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'setlanguage') {
+      await interaction.deferReply();
+      const lang = interaction.options.getString('language').toLowerCase();
+      if (!supportedLanguages.includes(lang)) {
+        await interaction.editReply('❗ Invalid language code. Supported: ' + supportedLanguages.join(', '));
+        return;
+      }
+      users[interaction.user.id] = lang;
+      await fs.writeFile(usersFile, JSON.stringify(users, null, 2), 'utf8');
+      await interaction.editReply(`✅ Language set to **${lang}**`);
+    } else if (interaction.commandName === 'translate') {
+      await interaction.deferReply();
+      const text = interaction.options.getString('text');
+      let targetLang = (interaction.options.getString('language') || users[interaction.user.id] || 'en').toLowerCase();
+      if (!supportedLanguages.includes(targetLang)) {
+        await interaction.editReply('❗ Invalid target language code. Supported: ' + supportedLanguages.join(', '));
+        return;
+      }
+      try {
+        console.log(`🔍 Detecting language for: "${text}"`);
+        const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: text });
+        const detectedLang = detectRes.data?.[0]?.language || 'unknown';
+        if (!supportedLanguages.includes(detectedLang)) {
+          await interaction.editReply('❗ Detected language not supported: ' + detectedLang);
+          return;
+        }
+        console.log(`🌐 Translating from ${detectedLang} to ${targetLang}`);
+        const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+          q: text,
+          source: detectedLang,
+          target: targetLang,
+          format: 'text'
+        });
+        const translated = transRes.data.translatedText;
+        await interaction.editReply({
+          content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+        });
+      } catch (err) {
+        console.error('❌ Translation error:', {
+          message: err.message,
+          response: err.response ? {
+            status: err.response.status,
+            data: err.response.data
+          } : 'No response'
+        });
+        await interaction.editReply('❌ Error translating text. Try again later.');
+      }
+    }
+  } else if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'translate_message') {
+    await interaction.deferReply();
+    const message = interaction.targetMessage;
+    const targetLang = users[interaction.user.id] || 'en';
+    if (!supportedLanguages.includes(targetLang)) {
+      await interaction.editReply('❗ Invalid target language code. Supported: ' + supportedLanguages.join(', '));
+      return;
+    }
+    try {
+      const detectRes = await axios.post(`${LIBRETRANSLATE_URL}/detect`, { q: message.content });
+      const detectedLang = detectRes.data?.[0]?.language;
+      if (!detectedLang) {
+        await interaction.editReply('❗ No language detected for the message');
+        return;
+      }
+      if (!supportedLanguages.includes(detectedLang)) {
+        await interaction.editReply(`❗ Detected language not supported: ${detectedLang}`);
+        return;
+      }
+      if (detectedLang === targetLang) {
+        await interaction.editReply({
+          content: `🌍 Message is already in \`${targetLang}\``,
+          ephemeral: true
+        });
+        return;
+      }
+      const transRes = await axios.post(`${LIBRETRANSLATE_URL}/translate`, {
+        q: message.content,
+        source: detectedLang,
+        target: targetLang,
+        format: 'text'
+      });
+      const translated = transRes.data.translatedText;
+      await interaction.editReply({
+        content: `🌍 **Translated from \`${detectedLang}\` to \`${targetLang}\`:**\n> ${translated}`
+      });
+    } catch (err) {
+      console.error('❌ Translation error:', {
+        message: err.message,
+        response: err.response ? {
+          status: err.response.status,
+          data: err.response.data
+        } : 'No response'
+      });
+      await interaction.editReply('❌ Error translating message. Try again later.');
+    }
+  }
+});
+
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (reaction.message.partial) await reaction.message.fetch();
+  if (reaction.partial) await reaction.fetch();
+  if (user.bot || reaction.message.channel.id !== WELCOME_CHANNEL_ID) {
+    console.log(`ℹ️ Ignoring reaction: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
+    return;
+  }
+  const messageId = process.env[MESSAGE_ID_KEY];
+  if (!messageId || reaction.message.id !== messageId) {
+    console.log(`ℹ️ Ignoring reaction: Message ID ${reaction.message.id} != ${messageId}`);
+    return;
+  }
+  const emojiId = reaction.emoji.id;
+  console.log(`➕ Reaction added by ${user.tag}: Emoji ID ${emojiId}`);
+  if (!emojiId || !Object.keys(roleMapping).includes(emojiId)) {
+    console.log(`⚠️ No role for emoji ID ${emojiId}`);
+    return;
+  }
+  const roleId = roleMapping[emojiId];
+  let member;
+  try {
+    member = await reaction.message.guild.members.fetch(user.id);
+  } catch (err) {
+    console.error(`❌ Error fetching member ${user.id}:`, err.message);
+    return;
+  }
+  if (!member) {
+    console.error(`❌ Member ${user.id} not found`);
+    return;
+  }
+  try {
+    for (const eId of Object.keys(roleMapping)) {
+      if (roleMapping[eId] !== roleId && member.roles.cache.has(roleMapping[eId])) {
+        await member.roles.remove(roleMapping[eId]);
+        console.log(`🗑️ Removed role ${roleMapping[eId]} from ${user.tag}`);
+      }
+    }
+  } catch (err) {
+    console.error(`❌ Error removing other roles from ${user.tag}:`, err.message);
+    return;
+  }
+  try {
+    if (!member.roles.cache.has(roleId)) {
+      await member.roles.add(roleId);
+      console.log(`✅ Added role ${roleId} to ${user.tag}`);
+    } else {
+      console.log(`ℹ️ ${user.tag} already has role ${roleId}`);
+    }
+  } catch (err) {
+    console.error(`❌ Error adding role ${roleId} to ${user.tag}:`, err.message);
+  }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+  if (reaction.message.partial) await reaction.message.fetch();
+  if (reaction.partial) await reaction.fetch();
+  if (user.bot || reaction.message.channel.id !== WELCOME_CHANNEL_ID) {
+    console.log(`ℹ️ Ignoring reaction removal: Bot=${user.bot}, Channel=${reaction.message.channel.id}`);
+    return;
+  }
+  const messageId = process.env[MESSAGE_ID_KEY];
+  if (!messageId || reaction.message.id !== messageId) {
+    console.log(`ℹ️ Ignoring reaction removal: Message ID ${reaction.message.id} != ${messageId}`);
+    return;
+  }
+  const emojiId = reaction.emoji.id;
+  console.log(`➖ Reaction removed by ${user.tag}: Emoji ID ${emojiId}`);
+  if (!emojiId || !Object.keys(roleMapping).includes(emojiId)) {
+    console.log(`⚠️ No role for emoji ID ${emojiId}`);
+    return;
+  }
+  const roleId = roleMapping[emojiId];
+  let member;
+  try {
+    member = await reaction.message.guild.members.fetch(user.id);
+  } catch (err) {
+    console.error(`❌ Error fetching member ${user.id}:`, err.message);
+    return;
+  }
+  if (!member) {
+    console.error(`❌ Member ${user.id} not found`);
+    return;
+  }
+  try {
+    if (member.roles.cache.has(roleId)) {
+      await member.roles.remove(roleId);
+      console.log(`🗑️ Removed role ${roleId} from ${user.tag}`);
+    } else {
+      console.log(`ℹ️ ${user.tag} does not have role ${roleId}`);
+    }
+  } catch (err) {
+    console.error(`❌ Error removing role ${roleId} from ${user.tag}:`, err.message);
+  }
+});
+
+process.on('uncaughtException', err => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 client.login(DISCORD_TOKEN);
